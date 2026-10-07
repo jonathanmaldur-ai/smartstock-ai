@@ -54,6 +54,16 @@ A parte de infraestrutura é toda minha responsabilidade:
 
 ## Experiência profissional
 
+### Técnico de TI — Dorémi Brinquedos
+*05/2026 – atual*
+
+- Suporte de TI à rede de lojas, ao e-commerce e ao depósito central
+- Responsável pelo projeto **SmartStock AI**: levantamento com a operação, regras de negócio, decisões, implantação e validação com os dados reais
+- Implantação e administração do servidor Linux (Ubuntu Server, PostgreSQL, Caddy com HTTPS e certificado interno, serviços systemd)
+- VPN para acesso remoto dos gestores, com firewall restrito e sem exposição do sistema na internet
+- Automação da importação dos relatórios do ERP (tarefa agendada no Windows + PowerShell) e publicação de versões sem senha guardada
+- Rotinas de backup diário do banco e do código em HD dedicado; gestão de usuários e acessos da plataforma
+
 ### Analista de Suporte de TI (Pleno) — SS3 Tecnologia
 *02/2025 – 03/2026*
 
