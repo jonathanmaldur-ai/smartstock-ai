@@ -7,7 +7,7 @@
 
 Em produção num servidor da própria empresa, sem exposição na internet.
 
-**Autor:** Jonathan Alves Ribeiro, Analista de Suporte e Infraestrutura de TI · [Sobre mim e currículo](SOBRE-MIM.md) · [LinkedIn](https://www.linkedin.com/in/jonathan-alves-ribeiro-95596a303)
+**Autor:** Jonathan Alves Ribeiro, Técnico de TI na Dorémi Brinquedos · [Sobre mim e currículo](SOBRE-MIM.md) · [LinkedIn](https://www.linkedin.com/in/jonathan-alves-ribeiro-95596a303)
 
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![React 19](https://img.shields.io/badge/React-19-61DAFB) ![TypeScript 7](https://img.shields.io/badge/TypeScript-7-3178C6) ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1) ![Testes](https://img.shields.io/badge/testes-197-2E7D32)
 

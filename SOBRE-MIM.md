@@ -1,6 +1,6 @@
 # Jonathan Alves Ribeiro
 
-**Analista de Suporte e Infraestrutura de TI** · Mogi Guaçu – SP
+**Técnico de TI na Dorémi Brinquedos** · Suporte e Infraestrutura de TI · Mogi Guaçu – SP
 [LinkedIn](https://www.linkedin.com/in/jonathan-alves-ribeiro-95596a303) · [Currículo em PDF](curriculo-jonathan-alves-ribeiro.pdf)
 
 Analista de Suporte com experiência em ambientes corporativos: suporte N1/N2, administração de usuários e acessos, gestão de chamados, segurança de endpoints e automação. Perfil analítico, focado em resolver incidentes na causa e em automatizar o que é repetitivo.
@@ -108,7 +108,7 @@ A parte de infraestrutura é toda minha responsabilidade:
 
 ## Formação
 
-- **Redes de Computadores** — Faculdade Metropolitana (cursando)
+- **Redes de Computadores** — Faculdade Metropolitana (concluído)
 - **Técnico em Informática** — ETEC João Maria Stevanatto (concluído)
 
 ## Certificações e cursos
