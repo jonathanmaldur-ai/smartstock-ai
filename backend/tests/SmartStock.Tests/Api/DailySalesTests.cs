@@ -1,4 +1,6 @@
+using System.Net;
 using System.Net.Http.Json;
+using SmartStock.Domain.Users;
 using SmartStock.Tests.Infrastructure;
 using static SmartStock.Tests.Infrastructure.ImportTestHelpers;
 
@@ -125,6 +127,26 @@ public sealed class DailySalesTests(SmartStockApiFactory factory)
             [a, $"PRODUTO A {a}", brand, "PC", "1", "BRINQUEDOS", "OUTROS", "R1", ""],
             [b, $"PRODUTO B {b}", brand, "PC", "1", "BRINQUEDOS", "OUTROS", "R2", ""]));
         return (a, b);
+    }
+
+    [Theory]
+    [InlineData(Roles.Gerente)]
+    [InlineData(Roles.Operador)]
+    [InlineData(Roles.Consulta)]
+    public async Task Somente_o_Administrador_ve_os_valores_de_venda(string role)
+    {
+        using var client = await factory.CreateClientForRoleAsync(role);
+        var (d1, d2) = Days();
+        var period = $"de={d1:yyyy-MM-dd}&ate={d2:yyyy-MM-dd}";
+
+        foreach (var path in new[]
+                 {
+                     $"/api/reports/vendas-diarias?{period}", $"/api/reports/vendas-diarias/excel?{period}",
+                     $"/api/reports/vendas-diarias/produtos?{period}", $"/api/reports/vendas-diarias/produtos/vendas?productId=1&{period}",
+                 })
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/reports")).StatusCode); // os outros relatórios continuam liberados
     }
 
     /// <summary>Dois dias seguidos num ano só deste teste, para não somar com outros testes no mesmo banco.</summary>

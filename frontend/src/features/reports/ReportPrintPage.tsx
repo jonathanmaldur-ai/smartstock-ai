@@ -4,11 +4,12 @@ import { useSearchParams } from 'react-router'
 import { BrandLogo } from '@/components/layout/BrandLogo'
 import { Button } from '@/components/ui/Button'
 import { Alert, Skeleton } from '@/components/ui/Feedback'
+import { hasRole, useAuth } from '@/features/auth/useAuth'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { DAILY_DESCRIPTION, DAILY_TITLE, DailySalesContent } from './DailySalesReport'
 import { MONTHLY_DESCRIPTION, MONTHLY_TITLE, MonthlyReportContent } from './MonthlyReport'
 import { ReportTable } from './ReportTable'
-import { DAILY_KEY, MONTHLY_KEY, useDailySales, useMonthlyReport, useReport } from './reportsApi'
+import { DAILY_KEY, MONTHLY_KEY, salesValueRoles, useDailySales, useMonthlyReport, useReport } from './reportsApi'
 
 /**
  * Versão de impressão de um relatório (decisão 42): o navegador salva em PDF pelo "Imprimir".
@@ -16,9 +17,17 @@ import { DAILY_KEY, MONTHLY_KEY, useDailySales, useMonthlyReport, useReport } fr
  */
 export function ReportPrintPage() {
   const [params] = useSearchParams()
+  const { user } = useAuth()
   const key = params.get('relatorio')
   if (key === MONTHLY_KEY) return <MonthlyPrint compareWith={params.get('comparar')} />
-  if (key === DAILY_KEY) return <DailyPrint />
+  if (key === DAILY_KEY)
+    return hasRole(user?.role, salesValueRoles) ? (
+      <DailyPrint />
+    ) : (
+      <div className="p-8">
+        <Alert tone="error">Você não tem permissão para ver este relatório.</Alert>
+      </div>
+    )
   return <TablePrint />
 }
 

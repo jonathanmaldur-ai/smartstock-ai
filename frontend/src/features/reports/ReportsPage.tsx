@@ -6,6 +6,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
 import { SelectField } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
+import { hasRole, useAuth } from '@/features/auth/useAuth'
 import { TableError, TableLoading } from '@/features/catalog/CatalogStates'
 import { useCategories, useStores } from '@/features/catalog/catalogApi'
 import { ApiError, apiDownload } from '@/lib/api'
@@ -14,7 +15,16 @@ import { formatDate } from '@/lib/format'
 import { DAILY_DESCRIPTION, DAILY_TITLE, DailySalesPanel } from './DailySalesReport'
 import { MONTHLY_DESCRIPTION, MONTHLY_TITLE, MonthlyReportPanel } from './MonthlyReport'
 import { ReportTable } from './ReportTable'
-import { DAILY_KEY, MONTHLY_KEY, reportQuery, useReport, useReportCatalog, type ReportFilters, type ReportInfo } from './reportsApi'
+import {
+  DAILY_KEY,
+  MONTHLY_KEY,
+  reportQuery,
+  salesValueRoles,
+  useReport,
+  useReportCatalog,
+  type ReportFilters,
+  type ReportInfo,
+} from './reportsApi'
 
 const MONTHLY_INFO: ReportInfo = { key: MONTHLY_KEY, title: MONTHLY_TITLE, description: MONTHLY_DESCRIPTION, group: 'Resumo do período' }
 const DAILY_INFO: ReportInfo = { key: DAILY_KEY, title: DAILY_TITLE, description: DAILY_DESCRIPTION, group: MONTHLY_INFO.group }
@@ -22,11 +32,13 @@ const DAILY_INFO: ReportInfo = { key: DAILY_KEY, title: DAILY_TITLE, description
 /** Central de relatórios (Fase 4, decisões 11 e 42): Excel, CSV e PDF (pela impressão). */
 export function ReportsPage() {
   const catalog = useReportCatalog()
+  const { user } = useAuth()
   const [selected, setSelected] = useState<ReportInfo | null>(null)
   const [filters, setFilters] = useState<ReportFilters>({})
+  const canSeeSalesValues = hasRole(user?.role, salesValueRoles)
 
   // O mensal vem primeiro; depois os grupos na ordem do servidor (Situação do estoque, Cobertura e giro, Transferências).
-  const groups: [string, ReportInfo[]][] = [[MONTHLY_INFO.group, [MONTHLY_INFO, DAILY_INFO]]]
+  const groups: [string, ReportInfo[]][] = [[MONTHLY_INFO.group, canSeeSalesValues ? [MONTHLY_INFO, DAILY_INFO] : [MONTHLY_INFO]]]
   for (const report of catalog.data?.reports ?? []) {
     const group = groups.find(([name]) => name === report.group)
     if (group) group[1].push(report)
@@ -74,7 +86,7 @@ export function ReportsPage() {
 
         {selected?.key === MONTHLY_KEY ? (
           <MonthlyReportPanel />
-        ) : selected?.key === DAILY_KEY ? (
+        ) : selected?.key === DAILY_KEY && canSeeSalesValues ? (
           <DailySalesPanel />
         ) : selected ? (
           <ReportPanel report={selected} filters={filters} onFilters={setFilters} brands={catalog.data?.brands ?? []} />

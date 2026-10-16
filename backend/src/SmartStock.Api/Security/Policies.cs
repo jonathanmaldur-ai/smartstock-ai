@@ -13,6 +13,9 @@ public static class Policies
     /// <summary>Aprovar ou rejeitar sugestões: Administrador e Gerente ("aprovação de ações", PRD).</summary>
     public const string CanApprove = nameof(CanApprove);
 
+    /// <summary>Valores de venda em R$ (relatório Vendas por dia): só o Administrador (decisão 59).</summary>
+    public const string CanSeeSalesValues = nameof(CanSeeSalesValues);
+
     /// <summary>Limite de tentativas nos endpoints públicos de autenticação (por IP).</summary>
     public const string AuthRateLimit = nameof(AuthRateLimit);
 }

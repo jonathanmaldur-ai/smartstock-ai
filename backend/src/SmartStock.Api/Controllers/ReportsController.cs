@@ -1,12 +1,14 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartStock.Api.Common;
 using SmartStock.Api.Exports;
+using SmartStock.Api.Security;
 using SmartStock.Application.Common;
 using SmartStock.Application.Reports;
 
 namespace SmartStock.Api.Controllers;
 
-/// <summary>Central de relatórios (Fase 4, decisão 42): consulta e download para todos os perfis.</summary>
+/// <summary>Central de relatórios (Fase 4, decisão 42): consulta e download para todos os perfis, menos Vendas por dia (valores em R$), só do Administrador (decisão 59).</summary>
 [ApiController]
 [Route("api/reports")]
 public sealed class ReportsController(IReportService reports, IMonthlyReportService monthly, IDailySalesReportService daily) : ControllerBase
@@ -34,11 +36,13 @@ public sealed class ReportsController(IReportService reports, IMonthlyReportServ
 
     /// <summary>Vendas por dia e por loja (decisão 51). Sem período: os últimos 30 dias com venda importada.</summary>
     [HttpGet("vendas-diarias")]
+    [Authorize(Policy = Policies.CanSeeSalesValues)]
     public Task<DailySalesReport> DailySales(
         [FromQuery] DateOnly? de, [FromQuery] DateOnly? ate, [FromQuery] int? storeId, CancellationToken cancellationToken) =>
         daily.BuildAsync(de, ate, storeId, 100, cancellationToken);
 
     [HttpGet("vendas-diarias/excel")]
+    [Authorize(Policy = Policies.CanSeeSalesValues)]
     public async Task<IActionResult> DailySalesExcel(
         [FromQuery] DateOnly? de, [FromQuery] DateOnly? ate, [FromQuery] int? storeId, CancellationToken cancellationToken)
     {
@@ -51,12 +55,14 @@ public sealed class ReportsController(IReportService reports, IMonthlyReportServ
 
     /// <summary>As vendas em que um produto saiu no período, numa loja ou na rede (decisão 53); até 500.</summary>
     [HttpGet("vendas-diarias/produtos/vendas")]
+    [Authorize(Policy = Policies.CanSeeSalesValues)]
     public Task<IReadOnlyList<SaleLineDetail>> DailySalesProductSales(
         [FromQuery] int productId, [FromQuery] DateOnly de, [FromQuery] DateOnly ate, [FromQuery] int? storeId, CancellationToken cancellationToken) =>
         daily.SaleLinesAsync(storeId, de, ate, productId, cancellationToken);
 
     /// <summary>Produtos vendidos em cada dia e loja (decisão 52), paginado.</summary>
     [HttpGet("vendas-diarias/produtos")]
+    [Authorize(Policy = Policies.CanSeeSalesValues)]
     public Task<PagedResult<DailySaleProductDay>> DailySalesProducts(
         [FromQuery] DateOnly? de, [FromQuery] DateOnly? ate, [FromQuery] int? storeId, [FromQuery] string? search,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default) =>

@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, type Role } from '@/lib/api'
 import { toQuery } from '@/lib/query'
 import type { Paged } from '@/features/catalog/catalogApi'
 
@@ -110,6 +110,8 @@ export type DailySalesReport = {
 
 /** Vendas por dia (decisão 51). Sem período: os últimos 30 dias com venda importada. */
 export const DAILY_KEY = 'vendas-diarias'
+/** Vendas por dia mostra valores em R$: só o Administrador (decisão 59). */
+export const salesValueRoles: readonly Role[] = ['Administrador']
 
 export type DailySalesFilters = { de?: string; ate?: string; storeId?: number }
 

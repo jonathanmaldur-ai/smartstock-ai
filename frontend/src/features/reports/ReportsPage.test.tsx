@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/ui/Toast'
-import { apiRequest } from '@/lib/api'
+import { AuthContext } from '@/features/auth/AuthProvider'
+import { apiRequest, type Role } from '@/lib/api'
 import { ReportPrintPage } from './ReportPrintPage'
 import { ReportsPage } from './ReportsPage'
 import type { DailySalesReport, MonthlyReport, ReportCatalog, ReportData } from './reportsApi'
@@ -118,7 +119,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 
 const api = vi.mocked(apiRequest)
 
-function renderAt(path: string) {
+function renderAt(path: string, role: Role = 'Administrador') {
   const router = createMemoryRouter(
     [
       { path: '/relatorios', element: <ReportsPage /> },
@@ -126,11 +127,14 @@ function renderAt(path: string) {
     ],
     { initialEntries: [path] },
   )
+  const user = { id: '1', email: 'x@example.com', fullName: 'X', role }
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>
+      <AuthContext value={{ status: 'authenticated', user, login: vi.fn(), logout: vi.fn() }}>
+        <ToastProvider>
+          <RouterProvider router={router} />
+        </ToastProvider>
+      </AuthContext>
     </QueryClientProvider>,
   )
 }
@@ -223,5 +227,19 @@ describe('Relatórios', () => {
     expect(api).toHaveBeenCalledWith('/reports/vendas-diarias/produtos/vendas?productId=7&de=2026-09-01&ate=2026-09-30')
     await userEvent.click(screen.getByRole('button', { name: 'Últimos 7 dias' }))
     expect(api).toHaveBeenCalledWith('/reports/vendas-diarias?de=2026-09-24&ate=2026-09-30')
+  })
+
+  it.each<Role>(['Gerente', 'Operador', 'Consulta'])('%s não vê vendas por dia (valores em R$) na lista de relatórios', async (role) => {
+    renderAt('/relatorios', role)
+
+    expect(await screen.findByRole('button', { name: 'Relatório mensal' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Vendas por dia' })).not.toBeInTheDocument()
+  })
+
+  it('a impressão de vendas por dia avisa a falta de permissão sem buscar os dados', async () => {
+    renderAt('/relatorios/imprimir?relatorio=vendas-diarias', 'Gerente')
+
+    expect(await screen.findByText('Você não tem permissão para ver este relatório.')).toBeInTheDocument()
+    expect(api).not.toHaveBeenCalledWith(expect.stringMatching(/^\/reports\/vendas-diarias/))
   })
 })

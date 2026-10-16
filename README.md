@@ -9,7 +9,7 @@ Em produção num servidor da própria empresa, sem exposição na internet.
 
 **Autor:** Jonathan Alves Ribeiro, Técnico de TI na Dorémi Brinquedos · [Sobre mim e currículo](SOBRE-MIM.md) · [LinkedIn](https://www.linkedin.com/in/jonathan-alves-ribeiro-95596a303)
 
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![React 19](https://img.shields.io/badge/React-19-61DAFB) ![TypeScript 7](https://img.shields.io/badge/TypeScript-7-3178C6) ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1) ![Testes](https://img.shields.io/badge/testes-197-2E7D32)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![React 19](https://img.shields.io/badge/React-19-61DAFB) ![TypeScript 7](https://img.shields.io/badge/TypeScript-7-3178C6) ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1) ![Testes](https://img.shields.io/badge/testes-204-2E7D32)
 
 ---
 
@@ -40,7 +40,7 @@ Em produção num servidor da própria empresa, sem exposição na internet.
 |---|---|
 | Importação de estoque (planilha Excel 4.0 com dezenas de milhares de linhas e uma coluna por loja) | segundos |
 | Gravação em lote | `COPY` binário do PostgreSQL |
-| Testes automatizados | 151 no backend (unidade + integração com PostgreSQL real) e 46 no frontend |
+| Testes automatizados | 154 no backend (unidade + integração com PostgreSQL real) e 50 no frontend |
 
 ## Arquitetura
 
@@ -78,13 +78,15 @@ backend/src
 - **Humano no controle.** Recomendações e alertas nunca executam nada; aprovar só registra a decisão. Toda ação relevante vai para a auditoria (usuário, data, IP e dados afetados).
 - **LGPD.** O relatório de vendas do ERP traz nome de cliente e vendedor: são descartados na importação. O sistema guarda só se o cliente era "balcão" ou "cadastrado".
 - **Segurança.** Sem exposição na internet: HTTPS com autoridade certificadora interna, acesso só pela rede da empresa ou por VPN. Login com e-mail corporativo, bloqueio após tentativas erradas, JWT de curta duração em memória, refresh token em cookie HttpOnly com rotação e detecção de reuso. Automações sem senha guardada e com o mínimo de permissão necessário.
+- **Perfis de acesso.** Administrador, Gerente, Operador e Consulta, com a regra aplicada na API (não só na tela). Exemplo: os valores de venda em R$ ficam só com o Administrador. O gerente vê as quantidades vendidas, que explicam as transferências que ele aprova, mas não o faturamento.
+- **VPN própria** ([`infra/openvpn`](infra/openvpn)). OpenVPN no próprio servidor, sem serviço de terceiros: certificados ECDSA, AES-256-GCM e `tls-crypt` (sem o arquivo da pessoa, a porta nem responde). Um acesso por pessoa, com senha no arquivo e revogação imediata. Quem conecta recebe só a rota do servidor e o firewall libera apenas a porta do SmartStock: nada mais da rede da empresa fica acessível.
 - **Publicação sem senha.** Um comando compila interface e API (linux-x64, self-contained), gera o executável de migrações (`efbundle`), faz backup do banco, troca a versão de forma atômica e confere o `/api/health`, mantendo as 3 últimas versões para voltar atrás.
 
 ## Tecnologias
 
 - **Backend:** .NET 10, ASP.NET Core, EF Core 10 + Npgsql (snake_case), ASP.NET Identity, ClosedXML, ExcelDataReader, xUnit + WebApplicationFactory
 - **Frontend:** React 19, TypeScript 7, Vite 8, TanStack Query, React Router 8, Tailwind CSS v4, Vitest + Testing Library
-- **Infra:** Linux, Caddy, systemd, PostgreSQL 17, backup automático
+- **Infra:** Linux (Ubuntu Server), Caddy, systemd, PostgreSQL 17, OpenVPN + Easy-RSA, ufw, backup automático
 
 ## Como rodar localmente
 
