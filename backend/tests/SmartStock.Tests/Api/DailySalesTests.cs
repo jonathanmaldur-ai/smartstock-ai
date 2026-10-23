@@ -69,20 +69,8 @@ public sealed class DailySalesTests(SmartStockApiFactory factory)
         using var admin = await factory.CreateAdminClientAsync();
         var (a, b) = await CreateProductsAsync(admin);
         var (d1, _) = Days();
-        var date = d1.ToString("dd-MMM-yy", System.Globalization.CultureInfo.InvariantCulture);
-        var day = d1.ToString("dd/MM/yyyy");
-        string[] headers = ["texto", "qtde", "vuni", "vtot", "vendta", "vennum", "tiporeg", "prouni", "qtdemask"];
-        var file = Xlsx(headers,
-            [$"0154604201  {day}  CLIENTE BALCAO  [Vr. Bruto: R$40,00  A/D: 0,00 %]", "2", "0", "35.97", date, "0154604201", "1", "", "2,0"],
-            [" Vd: [000200]-USUARIO9  F.Pagto: [000100]-01-A VISTA  Doc. fiscal: [NFC-e]", "0", "0", "0", date, "0154604201", "1", "", ""],
-            [$"   {a} PRODUTO A", "2", "12.99", "25.98", date, "0154604201", "2", "PC", "2,0000"],
-            [$"   {b} PRODUTO B", "1", "9.99", "9.99", date, "0154604201", "2", "UN", "1,000"],
-            [$"0154604301  {day}  CLIENTE BALCAO  [Vr. Bruto: R$20,00  A/D: 0,00 %]", "1", "0", "20.00", date, "0154604301", "1", "", "1,0"],
-            [" Vd: [000100]-VENDEDOR LOJA  F.Pagto: [000100]-01-A VISTA  Doc. fiscal: [NFC-e]", "0", "0", "0", date, "0154604301", "1", "", ""],
-            [$"   {a} PRODUTO A", "1", "20", "20.00", date, "0154604301", "2", "PC", "1,0000"],
-            ["   9999999999999 FORA DO CADASTRO", "1", "1", "1.00", date, "0154604301", "2", "PC", "1,0000"]);
 
-        var report = await admin.ImportAndConfirmAsync("DailySales", "PINDA.XLS", file);
+        var report = await admin.ImportAndConfirmAsync("DailySales", "PINDA.XLS", DetailedFile(a, b, d1));
 
         Assert.Equal("18", report.StoreCode); // nome abreviado
         Assert.Contains(report.IssueGroups, g => g.Code == "daily.product_not_found");
@@ -111,6 +99,69 @@ public sealed class DailySalesTests(SmartStockApiFactory factory)
         Assert.Equal(("01-A VISTA", "NFC-e"), (lines[0].Payment, lines[0].FiscalDocument));
     }
 
+    [Fact]
+    public async Task Vendas_em_quantidade_mostram_pecas_e_produtos_sem_nenhum_valor()
+    {
+        using var admin = await factory.CreateAdminClientAsync();
+        var (a, b) = await CreateProductsAsync(admin);
+        var (d1, _) = Days();
+        await admin.ImportAndConfirmAsync("DailySales", "PINDA.XLS", DetailedFile(a, b, d1, first: 154609901));
+        var storeId = await StoreIdAsync(admin, "18");
+        var query = $"de={d1:yyyy-MM-dd}&ate={d1:yyyy-MM-dd}&storeId={storeId}";
+        using var gerente = await factory.CreateClientForRoleAsync(Roles.Gerente);
+
+        var json = await gerente.GetStringAsync($"/api/reports/vendas-quantidade?{query}");
+        var products = await gerente.GetStringAsync($"/api/reports/vendas-quantidade/produtos?{query}");
+
+        foreach (var money in new[] { "net", "gross", "amount", "ticket", "price", "valor" })
+        {
+            Assert.DoesNotContain($"\"{money}", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain($"\"{money}", products, StringComparison.OrdinalIgnoreCase);
+        }
+        var report = System.Text.Json.JsonSerializer.Deserialize<QuantityDto>(json, ApiClientExtensions.Json)!;
+        Assert.Equal((5m, "18"), (report.Current.Pieces, report.Stores.Single().Code));
+        Assert.Equal((a, 3m), (report.Products.Items[0].Code, report.Products.Items[0].Quantity)); // ordem por quantidade
+        var excel = await gerente.GetAsync($"/api/reports/vendas-quantidade/excel?{query}");
+        excel.EnsureSuccessStatusCode();
+        using var workbook = new ClosedXML.Excel.XLWorkbook(await excel.Content.ReadAsStreamAsync());
+        Assert.Equal(["Resumo", "Por dia", "Por loja", "Produtos", "Produtos por dia"], workbook.Worksheets.Select(w => w.Name));
+        Assert.DoesNotContain(workbook.Worksheets.SelectMany(w => w.CellsUsed()), c => c.GetString().Contains("R$"));
+
+        using var consulta = await factory.CreateClientForRoleAsync(Roles.Consulta);
+        using var operador = await factory.CreateClientForRoleAsync(Roles.Operador);
+        Assert.Equal(HttpStatusCode.OK, (await consulta.GetAsync($"/api/reports/vendas-quantidade?{query}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await operador.GetAsync($"/api/reports/vendas-quantidade?{query}")).StatusCode);
+    }
+
+    /// <summary>Relatório "Detalhado por itens" de um dia: duas vendas (A×2 + B×1; A×1) e um produto fora do cadastro.</summary>
+    /// <param name="first">Número da primeira venda; a segunda é esse número + 100 (o número da venda é único por loja).</param>
+    private static byte[] DetailedFile(string a, string b, DateOnly d1, long first = 154604201)
+    {
+        var date = d1.ToString("dd-MMM-yy", System.Globalization.CultureInfo.InvariantCulture);
+        var day = d1.ToString("dd/MM/yyyy");
+        var (s1, s2) = (first.ToString("D10"), (first + 100).ToString("D10"));
+        string[] headers = ["texto", "qtde", "vuni", "vtot", "vendta", "vennum", "tiporeg", "prouni", "qtdemask"];
+        return Xlsx(headers,
+            [$"{s1}  {day}  CLIENTE BALCAO  [Vr. Bruto: R$40,00  A/D: 0,00 %]", "2", "0", "35.97", date, s1, "1", "", "2,0"],
+            [" Vd: [000200]-ANA  F.Pagto: [000100]-01-A VISTA  Doc. fiscal: [NFC-e]", "0", "0", "0", date, s1, "1", "", ""],
+            [$"   {a} PRODUTO A", "2", "12.99", "25.98", date, s1, "2", "PC", "2,0000"],
+            [$"   {b} PRODUTO B", "1", "9.99", "9.99", date, s1, "2", "UN", "1,000"],
+            [$"{s2}  {day}  CLIENTE BALCAO  [Vr. Bruto: R$20,00  A/D: 0,00 %]", "1", "0", "20.00", date, s2, "1", "", "1,0"],
+            [" Vd: [000100]-VENDEDOR LOJA  F.Pagto: [000100]-01-A VISTA  Doc. fiscal: [NFC-e]", "0", "0", "0", date, s2, "1", "", ""],
+            [$"   {a} PRODUTO A", "1", "20", "20.00", date, s2, "2", "PC", "1,0000"],
+            ["   9999999999999 FORA DO CADASTRO", "1", "1", "1.00", date, s2, "2", "PC", "1,0000"]);
+    }
+
+    private sealed record QuantityDto(QuantityTotalsDto Current, List<QuantityStoreDto> Stores, QuantityProductsDto Products);
+
+    private sealed record QuantityTotalsDto(decimal Pieces);
+
+    private sealed record QuantityStoreDto(string Code, decimal Pieces);
+
+    private sealed record QuantityProductsDto(List<QuantityProductDto> Items);
+
+    private sealed record QuantityProductDto(string Code, decimal Quantity);
+
     private sealed record SaleLineDto(
         string SaleNumber, decimal Quantity, decimal UnitPrice, decimal Amount, decimal SaleTotal, int SaleItems, bool RegisteredCustomer,
         string? Payment, string? FiscalDocument);
@@ -133,7 +184,7 @@ public sealed class DailySalesTests(SmartStockApiFactory factory)
     [InlineData(Roles.Gerente)]
     [InlineData(Roles.Operador)]
     [InlineData(Roles.Consulta)]
-    public async Task Somente_o_Administrador_ve_os_valores_de_venda(string role)
+    public async Task Somente_o_Administrador_ve_os_relatorios_gerenciais(string role)
     {
         using var client = await factory.CreateClientForRoleAsync(role);
         var (d1, d2) = Days();
@@ -143,6 +194,7 @@ public sealed class DailySalesTests(SmartStockApiFactory factory)
                  {
                      $"/api/reports/vendas-diarias?{period}", $"/api/reports/vendas-diarias/excel?{period}",
                      $"/api/reports/vendas-diarias/produtos?{period}", $"/api/reports/vendas-diarias/produtos/vendas?productId=1&{period}",
+                     "/api/reports/mensal", "/api/reports/mensal/excel",
                  })
             Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path)).StatusCode);
 

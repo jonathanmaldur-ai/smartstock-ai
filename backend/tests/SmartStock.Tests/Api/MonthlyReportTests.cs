@@ -60,13 +60,12 @@ public sealed class MonthlyReportTests(SmartStockApiFactory factory)
     }
 
     [Fact]
-    public async Task Excel_tem_as_tres_abas_e_consulta_pode_baixar()
+    public async Task Excel_tem_as_tres_abas()
     {
         using var admin = await factory.CreateAdminClientAsync();
         await PrepareRuptureAsync(admin);
-        using var consulta = await factory.CreateClientForRoleAsync(Roles.Consulta);
 
-        var excel = await consulta.GetAsync("/api/reports/mensal/excel");
+        var excel = await admin.GetAsync("/api/reports/mensal/excel"); // só o Administrador (decisão 61)
 
         excel.EnsureSuccessStatusCode();
         using var workbook = new ClosedXML.Excel.XLWorkbook(await excel.Content.ReadAsStreamAsync());

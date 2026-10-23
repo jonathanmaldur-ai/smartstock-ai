@@ -8,9 +8,6 @@ namespace SmartStock.Infrastructure.Reports;
 /// <summary>Vendas por dia e por loja (decisão 51): totais, comparação com o período anterior, lojas e dia da semana.</summary>
 internal sealed class DailySalesReportService(SmartStockDbContext db) : IDailySalesReportService
 {
-    private const int DefaultDays = 30;
-    private const int MaxDays = 400;
-
     /// <summary>Limite da lista de vendas de um produto na tela (o Excel traz todas).</summary>
     private const int MaxSaleLines = 500;
     private static readonly string[] WeekdayLabels = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
@@ -26,10 +23,8 @@ internal sealed class DailySalesReportService(SmartStockDbContext db) : IDailySa
         if (first is null || last is null)
             return new DailySalesReport(null, null, null, null, null, null, scope, Totals([]), null, [], [], [], new DailySalesProducts(false, 0, []));
 
-        var (start, end) = Period(from, to, last.Value);
-        var length = end.DayNumber - start.DayNumber + 1;
-        var previousEnd = start.AddDays(-1);
-        var previousStart = previousEnd.AddDays(-(length - 1));
+        var (start, end) = SalesPeriod.Resolve(from, to, last.Value);
+        var (previousStart, previousEnd) = SalesPeriod.Previous(start, end);
 
         var rows = await (
                 from s in available
@@ -60,7 +55,7 @@ internal sealed class DailySalesReportService(SmartStockDbContext db) : IDailySa
         if (last is null)
             return new PagedResult<DailySaleProductDay>([], page, query.PageSize ?? 0, 0);
 
-        var (start, end) = Period(query.From, query.To, last.Value);
+        var (start, end) = SalesPeriod.Resolve(query.From, query.To, last.Value);
         var items =
             from i in db.DailySaleItems.AsNoTracking()
             join s in db.Stores on i.StoreId equals s.Id
@@ -112,7 +107,7 @@ internal sealed class DailySalesReportService(SmartStockDbContext db) : IDailySa
         if (last is null)
             return [];
 
-        var (start, end) = Period(from, to, last.Value);
+        var (start, end) = SalesPeriod.Resolve(from, to, last.Value);
         return await (
                 from l in db.StoreSaleLines.AsNoTracking()
                 join s in db.StoreSales on new { l.StoreId, Number = l.SaleNumber } equals new { s.StoreId, s.Number }
@@ -124,19 +119,6 @@ internal sealed class DailySalesReportService(SmartStockDbContext db) : IDailySa
                     l.Date, st.Code, st.Name, l.SaleNumber, s.RegisteredCustomer, s.FiscalDocument, s.Payment, s.Net,
                     p.Code, p.Description, l.Quantity, l.UnitPrice, l.Amount))
             .ToListAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Período do relatório: sem datas, os últimos 30 dias. Depois do último dia importado não há venda: o período termina nele,
-    /// senão a comparação com o período anterior (que tem o mesmo número de dias) mostraria quedas que não existem.
-    /// </summary>
-    private static (DateOnly Start, DateOnly End) Period(DateOnly? from, DateOnly? to, DateOnly last)
-    {
-        var end = to is { } requested && requested < last ? requested : last;
-        var start = from ?? end.AddDays(-(DefaultDays - 1));
-        if (start > end) start = end;
-        if (end.DayNumber - start.DayNumber + 1 > MaxDays) start = end.AddDays(-(MaxDays - 1));
-        return (start, end);
     }
 
     /// <summary>Produtos vendidos no período (relatório detalhado por itens), dos que mais venderam em valor.</summary>

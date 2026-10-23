@@ -25,6 +25,12 @@ public class StockAnalysis
     public int SuggestionCount { get; set; }
     public decimal SuggestedUnits { get; set; }
     public int PurchaseCount { get; set; }
+
+    /// <summary>
+    /// Quando o detalhe recalculável (situação por produto, negativos, alertas e compras) foi removido pela retenção (decisão 56).
+    /// A análise e as decisões de transferência continuam guardadas.
+    /// </summary>
+    public DateTimeOffset? DetailsRemovedAt { get; set; }
 }
 
 /// <summary>Situação de um produto numa loja, numa análise.</summary>

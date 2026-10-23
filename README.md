@@ -9,7 +9,7 @@ Em produção num servidor da própria empresa, sem exposição na internet.
 
 **Autor:** Jonathan Alves Ribeiro, Técnico de TI na Dorémi Brinquedos · [Sobre mim e currículo](SOBRE-MIM.md) · [LinkedIn](https://www.linkedin.com/in/jonathan-alves-ribeiro-95596a303)
 
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![React 19](https://img.shields.io/badge/React-19-61DAFB) ![TypeScript 7](https://img.shields.io/badge/TypeScript-7-3178C6) ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1) ![Testes](https://img.shields.io/badge/testes-204-2E7D32)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4) ![React 19](https://img.shields.io/badge/React-19-61DAFB) ![TypeScript 7](https://img.shields.io/badge/TypeScript-7-3178C6) ![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1) ![Testes](https://img.shields.io/badge/testes-212-2E7D32)
 
 ---
 
@@ -31,7 +31,7 @@ Em produção num servidor da própria empresa, sem exposição na internet.
 | **Alertas** | Comparando com a análise anterior: venda diária sem reposição, previsão de ruptura, queda brusca de estoque (descontando o que saiu por transferência), sobra numa loja e falta em outra, marca mal distribuída. "Já vi" persistente entre análises e resumo opcional por e-mail. |
 | **Estoque negativo** | Painel por loja com tendência, causas prováveis (transferência não recebida, venda sem entrada de nota, código duplicado…) e Excel para correção no ERP. |
 | **Vendas por dia** | Do relatório de vendas detalhado: valor, cupons, ticket médio e peças por venda contra o período anterior, produtos vendidos por loja e dia e, para cada produto, **as vendas que formaram o número** (cupom, preço, documento fiscal, balcão ou cliente cadastrado). |
-| **Relatórios** | Relatório mensal (análise atual × anterior, precisão das transferências) e mais 9 relatórios, em Excel, CSV e PDF. |
+| **Relatórios** | Relatório mensal (análise atual × anterior, precisão das transferências) e mais 9 relatórios, em Excel, CSV e PDF. **Vendas em quantidade**: o dia a dia de vendas só em peças, sem valores, para os perfis que aprovam transferências. |
 | **Assistente** | Perguntas em português ("ruptura na loja 06", "negativos da marca X") respondidas com as mesmas consultas das telas, por regras, sem custo de IA. |
 
 ## Desempenho e qualidade
@@ -40,7 +40,7 @@ Em produção num servidor da própria empresa, sem exposição na internet.
 |---|---|
 | Importação de estoque (planilha Excel 4.0 com dezenas de milhares de linhas e uma coluna por loja) | segundos |
 | Gravação em lote | `COPY` binário do PostgreSQL |
-| Testes automatizados | 154 no backend (unidade + integração com PostgreSQL real) e 50 no frontend |
+| Testes automatizados | 156 no backend (unidade + integração com PostgreSQL real) e 56 no frontend |
 
 ## Arquitetura
 
@@ -80,6 +80,7 @@ backend/src
 - **Segurança.** Sem exposição na internet: HTTPS com autoridade certificadora interna, acesso só pela rede da empresa ou por VPN. Login com e-mail corporativo, bloqueio após tentativas erradas, JWT de curta duração em memória, refresh token em cookie HttpOnly com rotação e detecção de reuso. Automações sem senha guardada e com o mínimo de permissão necessário.
 - **Perfis de acesso.** Administrador, Gerente, Operador e Consulta, com a regra aplicada na API (não só na tela). Exemplo: os valores de venda em R$ ficam só com o Administrador. O gerente vê as quantidades vendidas, que explicam as transferências que ele aprova, mas não o faturamento.
 - **VPN própria** ([`infra/openvpn`](infra/openvpn)). OpenVPN no próprio servidor, sem serviço de terceiros: certificados ECDSA, AES-256-GCM e `tls-crypt` (sem o arquivo da pessoa, a porta nem responde). Um acesso por pessoa, com senha no arquivo e revogação imediata. Quem conecta recebe só a rota do servidor e o firewall libera apenas a porta do SmartStock: nada mais da rede da empresa fica acessível.
+- **Projeto operado no próprio servidor.** Código, testes e publicação rodam no servidor: os testes usam um banco isolado, com usuário próprio e sem acesso à produção; backup diário do código e dos dados num HD separado; cada commit vai para um repositório privado completo. Esta cópia pública é gerada por um script que troca os dados da empresa e **só publica se uma verificação final não encontrar nada sensível** (nomes, domínio, IPs, chaves).
 - **Publicação sem senha.** Um comando compila interface e API (linux-x64, self-contained), gera o executável de migrações (`efbundle`), faz backup do banco, troca a versão de forma atômica e confere o `/api/health`, mantendo as 3 últimas versões para voltar atrás.
 
 ## Tecnologias

@@ -4,7 +4,7 @@ using Xunit.Abstractions;
 namespace SmartStock.Tests.Api;
 
 /// <summary>
-/// Conferência com as planilhas reais da pasta "04 - Dados" (não versionadas).
+/// Conferência com as planilhas reais da carga inicial, em "04 - Dados\Arquivo - carga inicial (setembro 2026)" (não versionadas).
 /// Fica fora da execução normal. Para rodar: dotnet test --filter "Category=DadosReais"
 /// </summary>
 [Collection(ApiCollection.Name)]
@@ -17,7 +17,7 @@ public sealed class RealDataImportTests(SmartStockApiFactory factory, ITestOutpu
         var dataFolder = FindDataFolder();
         if (dataFolder is null)
         {
-            output.WriteLine("Pasta \"04 - Dados\" não encontrada: teste ignorado.");
+            output.WriteLine($"Pasta \"04 - Dados\\{ArchiveFolder}\" não encontrada: teste ignorado.");
             return;
         }
 
@@ -39,11 +39,13 @@ public sealed class RealDataImportTests(SmartStockApiFactory factory, ITestOutpu
         }
     }
 
+    private const string ArchiveFolder = "Arquivo - carga inicial (setembro 2026)";
+
     private static string? FindDataFolder()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            var candidate = Path.Combine(dir.FullName, "04 - Dados");
+            var candidate = Path.Combine(dir.FullName, "04 - Dados", ArchiveFolder);
             if (Directory.Exists(candidate))
                 return candidate;
         }

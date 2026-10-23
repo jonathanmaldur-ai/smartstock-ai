@@ -48,7 +48,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }))
 
 function renderDashboard() {
-  const user = { id: '1', email: 'x@example.com', fullName: 'Usuário Teste', role: 'Consulta' as const }
+  const user = { id: '1', email: 'x@example.com', fullName: 'Administrador', role: 'Consulta' as const }
   const router = createMemoryRouter([{ path: '/', element: <DashboardPage /> }])
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>

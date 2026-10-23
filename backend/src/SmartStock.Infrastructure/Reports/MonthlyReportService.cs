@@ -14,6 +14,7 @@ internal sealed class MonthlyReportService(SmartStockDbContext db) : IMonthlyRep
     public async Task<Result<MonthlyReport>> BuildAsync(Guid? compareWith, CancellationToken cancellationToken = default)
     {
         var analyses = await db.StockAnalyses.AsNoTracking()
+            .Where(a => a.DetailsRemovedAt == null) // retenção (decisão 56): sem o detalhe não há o que comparar
             .OrderByDescending(a => a.CreatedAt)
             .Select(a => new AnalysisRef(a.Id, a.AnalysisDate, a.StockDate, a.CreatedAt))
             .ToListAsync(cancellationToken);

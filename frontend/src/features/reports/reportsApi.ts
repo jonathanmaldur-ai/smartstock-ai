@@ -110,8 +110,8 @@ export type DailySalesReport = {
 
 /** Vendas por dia (decisão 51). Sem período: os últimos 30 dias com venda importada. */
 export const DAILY_KEY = 'vendas-diarias'
-/** Vendas por dia mostra valores em R$: só o Administrador (decisão 59). */
-export const salesValueRoles: readonly Role[] = ['Administrador']
+/** Relatórios gerenciais (Vendas por dia, com valores em R$, e Relatório mensal): só o Administrador (decisões 59 e 61). */
+export const executiveReportRoles: readonly Role[] = ['Administrador']
 
 export type DailySalesFilters = { de?: string; ate?: string; storeId?: number }
 
@@ -172,6 +172,48 @@ export type SaleLine = {
   payment: string | null
   fiscalDocument: string | null
 }
+
+/** Vendas em quantidade (decisão 62): as vendas do dia a dia só com peças e quantidades, sem valores. */
+export const QUANTITY_KEY = 'vendas-quantidade'
+/** Quem vê o relatório na lista: Gerente, Operador e Consulta. O Administrador usa o Vendas por dia, com os valores. */
+export const quantityReportRoles: readonly Role[] = ['Gerente', 'Operador', 'Consulta']
+
+export type QuantityTotals = { pieces: number; days: number; piecesPerDay: number | null }
+
+export type QuantitySalesReport = {
+  from: string | null
+  to: string | null
+  previousFrom: string | null
+  previousTo: string | null
+  firstAvailable: string | null
+  lastAvailable: string | null
+  scope: string
+  current: QuantityTotals
+  previous: QuantityTotals | null
+  days: { date: string; pieces: number }[]
+  stores: { storeId: number; code: string; name: string; pieces: number; previousPieces: number | null; bestDay: string | null; bestDayPieces: number | null }[]
+  products: {
+    available: boolean
+    total: number
+    items: { productId: number; code: string; description: string; brand: string; quantity: number; days: number; stores: number }[]
+  }
+}
+
+export type QuantityProductDay = Omit<ProductDay, 'amount' | 'sales'>
+
+export const useQuantitySales = (filters: DailySalesFilters) =>
+  useQuery({
+    queryKey: ['reports', QUANTITY_KEY, filters],
+    placeholderData: keepPreviousData,
+    queryFn: () => apiRequest<QuantitySalesReport>(`/reports/${QUANTITY_KEY}?${toQuery(filters)}`),
+  })
+
+export const useQuantityProductDays = (filters: DailySalesFilters & { search?: string; page: number }) =>
+  useQuery({
+    queryKey: ['reports', QUANTITY_KEY, 'produtos', filters],
+    placeholderData: keepPreviousData,
+    queryFn: () => apiRequest<Paged<QuantityProductDay>>(`/reports/${QUANTITY_KEY}/produtos?${toQuery({ ...filters, pageSize: 50 })}`),
+  })
 
 /** As vendas em que um produto saiu numa loja e num dia (decisão 53). */
 export const useSaleLines = (key: { productId: number; de: string; ate: string; storeId?: number } | null) =>

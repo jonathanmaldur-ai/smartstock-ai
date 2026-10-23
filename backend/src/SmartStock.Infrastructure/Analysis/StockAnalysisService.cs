@@ -84,6 +84,8 @@ internal sealed class StockAnalysisService(
         if (parameters.SendAlertEmail)
             await alertNotifier.NotifyAsync(analysis, alerts, cancellationToken);
 
+        await RemoveOldDetailsAsync(cancellationToken);
+
         return await GetSummaryAsync(cancellationToken);
     }
 
@@ -418,6 +420,38 @@ internal sealed class StockAnalysisService(
 
     private static Task WriteNullableAsync(Npgsql.NpgsqlBinaryImporter writer, decimal? value, CancellationToken cancellationToken) =>
         value is null ? writer.WriteNullAsync(cancellationToken) : writer.WriteAsync(Math.Round(value.Value, 2), NpgsqlDbType.Numeric, cancellationToken);
+
+    /// <summary>Por quantos dias o detalhe de toda análise fica guardado (decisão 56).</summary>
+    public const int DetailRetentionDays = 60;
+
+    /// <summary>
+    /// Retenção (decisão 56): com análise todo dia, o detalhe recalculável (situação por produto, negativos, alertas e compras)
+    /// das análises com mais de 60 dias é removido, menos o da última análise de cada foto de estoque, que é a usada nas
+    /// comparações. A análise e as sugestões de transferência (com as decisões) nunca são removidas.
+    /// </summary>
+    private async Task RemoveOldDetailsAsync(CancellationToken cancellationToken)
+    {
+        var limit = clock.GetUtcNow().AddDays(-DetailRetentionDays);
+        var analyses = await db.StockAnalyses.AsNoTracking()
+            .Where(a => a.DetailsRemovedAt == null)
+            .Select(a => new { a.Id, a.StockDate, a.CreatedAt })
+            .ToListAsync(cancellationToken);
+        var keep = analyses.GroupBy(a => a.StockDate).Select(g => g.MaxBy(a => a.CreatedAt)!.Id).ToHashSet();
+        var ids = analyses.Where(a => a.CreatedAt < limit && !keep.Contains(a.Id)).Select(a => a.Id).ToList();
+        if (ids.Count == 0)
+            return;
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await db.StockPositions.Where(p => ids.Contains(p.AnalysisId)).ExecuteDeleteAsync(cancellationToken);
+        await db.NegativeStocks.Where(n => ids.Contains(n.AnalysisId)).ExecuteDeleteAsync(cancellationToken);
+        await db.StockAlerts.Where(a => ids.Contains(a.AnalysisId)).ExecuteDeleteAsync(cancellationToken);
+        await db.PurchaseSuggestions.Where(p => ids.Contains(p.AnalysisId)).ExecuteDeleteAsync(cancellationToken);
+        var now = clock.GetUtcNow();
+        await db.StockAnalyses.Where(a => ids.Contains(a.Id))
+            .ExecuteUpdateAsync(u => u.SetProperty(a => a.DetailsRemovedAt, now), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        logger.LogInformation("Retenção: detalhe de {Count} análise(s) antigas removido.", ids.Count);
+    }
 
     /// <summary>Estoque ou vendas importados, ou parâmetros alterados, depois da análise.</summary>
     private async Task<bool> IsOutdatedAsync(StockAnalysis latest, CancellationToken cancellationToken) =>

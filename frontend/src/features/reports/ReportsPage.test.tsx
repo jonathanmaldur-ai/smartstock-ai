@@ -8,7 +8,7 @@ import { AuthContext } from '@/features/auth/AuthProvider'
 import { apiRequest, type Role } from '@/lib/api'
 import { ReportPrintPage } from './ReportPrintPage'
 import { ReportsPage } from './ReportsPage'
-import type { DailySalesReport, MonthlyReport, ReportCatalog, ReportData } from './reportsApi'
+import type { DailySalesReport, MonthlyReport, QuantitySalesReport, ReportCatalog, ReportData } from './reportsApi'
 
 const totals = (net: number, sales: number) => ({
   net,
@@ -61,6 +61,28 @@ const daily: DailySalesReport = {
     available: true,
     total: 1520,
     items: [{ productId: 7, code: '0027084120134', description: 'HW CARROS BASICOS', brand: 'MATTEL', quantity: 812, amount: 11586.5, days: 30, stores: 10 }],
+  },
+}
+
+const quantity: QuantitySalesReport = {
+  from: '2026-09-01',
+  to: '2026-09-30',
+  previousFrom: '2026-08-02',
+  previousTo: '2026-08-31',
+  firstAvailable: '2026-07-01',
+  lastAvailable: '2026-09-30',
+  scope: 'Rede toda',
+  current: { pieces: 2500, days: 30, piecesPerDay: 83.3 },
+  previous: { pieces: 2000, days: 30, piecesPerDay: 66.7 },
+  days: [
+    { date: '2026-09-29', pieces: 60 },
+    { date: '2026-09-30', pieces: 80 },
+  ],
+  stores: [{ storeId: 11, code: '11', name: 'Taubaté', pieces: 800, previousPieces: 640, bestDay: '2026-09-12', bestDayPieces: 42 }],
+  products: {
+    available: true,
+    total: 1520,
+    items: [{ productId: 7, code: '0027084120134', description: 'HW CARROS BASICOS', brand: 'MATTEL', quantity: 812, days: 30, stores: 10 }],
   },
 }
 
@@ -159,6 +181,15 @@ describe('Relatórios', () => {
           totalPages: 1,
         })
       if (path.startsWith('/reports/vendas-diarias')) return Promise.resolve(daily)
+      if (path.startsWith('/reports/vendas-quantidade/produtos'))
+        return Promise.resolve({
+          items: [{ date: '2026-09-30', storeId: 1, storeCode: '01', storeName: 'Matriz', productId: 9, code: '7908402412304', description: 'CESTINHA PICNIC', brand: 'MARCA TESTE', quantity: 108 }],
+          page: 1,
+          pageSize: 50,
+          totalCount: 1,
+          totalPages: 1,
+        })
+      if (path.startsWith('/reports/vendas-quantidade')) return Promise.resolve(quantity)
       return Promise.resolve([])
     })
   })
@@ -229,17 +260,45 @@ describe('Relatórios', () => {
     expect(api).toHaveBeenCalledWith('/reports/vendas-diarias?de=2026-09-24&ate=2026-09-30')
   })
 
-  it.each<Role>(['Gerente', 'Operador', 'Consulta'])('%s não vê vendas por dia (valores em R$) na lista de relatórios', async (role) => {
+  it.each<Role>(['Gerente', 'Operador', 'Consulta'])('%s não vê o relatório mensal nem vendas por dia na lista de relatórios', async (role) => {
     renderAt('/relatorios', role)
 
-    expect(await screen.findByRole('button', { name: 'Relatório mensal' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Ruptura' })).toBeInTheDocument()
+    expect(screen.queryByText('Resumo do período')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Relatório mensal' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Vendas por dia' })).not.toBeInTheDocument()
   })
 
-  it('a impressão de vendas por dia avisa a falta de permissão sem buscar os dados', async () => {
-    renderAt('/relatorios/imprimir?relatorio=vendas-diarias', 'Gerente')
+  it.each<[Role, boolean]>([
+    ['Gerente', true],
+    ['Consulta', true],
+    ['Operador', true],
+    ['Administrador', false],
+  ])('%s vê vendas em quantidade na lista: %s', async (role, visible) => {
+    renderAt('/relatorios', role)
+
+    expect(await screen.findByRole('button', { name: 'Ruptura' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Vendas em quantidade' }) !== null).toBe(visible)
+  })
+
+  it('vendas em quantidade mostram peças, lojas e produtos sem nenhum valor em R$', async () => {
+    renderAt('/relatorios', 'Gerente')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Vendas em quantidade' }))
+
+    expect(await screen.findByText('2.500')).toBeInTheDocument()
+    expect(screen.getAllByText('+25%')).toHaveLength(2) // rede: 2.500 contra 2.000 peças; Taubaté: 800 contra 640
+    expect(screen.getByText('HW CARROS BASICOS')).toBeInTheDocument()
+    expect(await screen.findByText('CESTINHA PICNIC')).toBeInTheDocument()
+    expect(screen.queryByText(/R\$/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ver vendas|Ver as vendas/ })).not.toBeInTheDocument()
+    expect(api).not.toHaveBeenCalledWith(expect.stringMatching(/^\/reports\/vendas-diarias/))
+  })
+
+  it.each(['vendas-diarias', 'mensal'])('a impressão de %s avisa a falta de permissão sem buscar os dados', async (key) => {
+    renderAt(`/relatorios/imprimir?relatorio=${key}`, 'Gerente')
 
     expect(await screen.findByText('Você não tem permissão para ver este relatório.')).toBeInTheDocument()
-    expect(api).not.toHaveBeenCalledWith(expect.stringMatching(/^\/reports\/vendas-diarias/))
+    expect(api).not.toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^/reports/${key}`)))
   })
 })

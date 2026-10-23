@@ -114,7 +114,8 @@ static void AddAuthentication(WebApplicationBuilder builder)
         .AddPolicy(Policies.CanImport, p => p.RequireRole(Roles.Administrador, Roles.Operador))
         .AddPolicy(Policies.CanAnalyze, p => p.RequireRole(Roles.Administrador, Roles.Gerente, Roles.Operador))
         .AddPolicy(Policies.CanApprove, p => p.RequireRole(Roles.Administrador, Roles.Gerente))
-        .AddPolicy(Policies.CanSeeSalesValues, p => p.RequireRole(Roles.Administrador));
+        .AddPolicy(Policies.CanSeeExecutiveReports, p => p.RequireRole(Roles.Administrador))
+        .AddPolicy(Policies.CanSeeQuantitySales, p => p.RequireRole(Roles.Administrador, Roles.Gerente, Roles.Operador, Roles.Consulta));
 }
 
 static void AddRateLimiting(IServiceCollection services, int permitPerMinute) =>

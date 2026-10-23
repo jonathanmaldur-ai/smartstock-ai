@@ -409,6 +409,10 @@ namespace SmartStock.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("created_by_email");
 
+                    b.Property<DateTimeOffset?>("DetailsRemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("details_removed_at");
+
                     b.Property<string>("Parameters")
                         .IsRequired()
                         .HasColumnType("jsonb")

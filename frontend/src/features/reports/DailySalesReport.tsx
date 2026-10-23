@@ -1,15 +1,14 @@
-import { ArrowDown, ArrowUp, CalendarDays, Download, Minus, Printer } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { CalendarDays, Download, Printer } from 'lucide-react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { BarChart, ChartCard, LineChart } from '@/components/ui/Chart'
 import { Alert, EmptyState } from '@/components/ui/Feedback'
-import { SelectField, TextField } from '@/components/ui/Field'
+import { TextField } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Pagination, Table, Td, Th } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/Toast'
 import { TableError, TableLoading } from '@/features/catalog/CatalogStates'
-import { useStores } from '@/features/catalog/catalogApi'
 import { ProductOverviewView } from '@/features/catalog/ProductOverviewView'
 import { ApiError, apiDownload } from '@/lib/api'
 import { cn } from '@/lib/cn'
@@ -17,31 +16,21 @@ import { formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { toQuery } from '@/lib/query'
 import { useDebouncedValue } from '@/lib/useDebouncedValue'
 import { DAILY_KEY, useDailySales, useProductDays, useSaleLines, type DailySalesFilters, type DailySalesReport } from './reportsApi'
+import { Delta, Figure, SalesFilters } from './SalesShared'
 
 export const DAILY_TITLE = 'Vendas por dia'
 export const DAILY_DESCRIPTION =
   'Quanto cada loja vendeu dia a dia: valor, vendas, ticket médio, produtos mais vendidos, comparação com o período anterior e o melhor dia da semana.'
 
-const presets = [7, 30, 90] as const
-
 /** Dias mínimos do período para mostrar a média por dia da semana (duas semanas). */
 const MIN_WEEKDAY_PERIOD = 14
-
-/** "2026-09-30" menos n dias, sem fuso. */
-function minusDays(iso: string, days: number) {
-  const date = new Date(`${iso}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() - days)
-  return date.toISOString().slice(0, 10)
-}
 
 /** Painel de vendas por dia na central de relatórios (decisão 51). */
 export function DailySalesPanel() {
   const toast = useToast()
-  const stores = useStores()
   const [filters, setFilters] = useState<DailySalesFilters>({})
   const { data, isPending, isError, refetch, isFetching } = useDailySales(filters)
   const [downloading, setDownloading] = useState(false)
-  const last = data?.lastAvailable
 
   const download = async () => {
     setDownloading(true)
@@ -55,8 +44,6 @@ export function DailySalesPanel() {
   }
 
   const print = () => window.open(`/relatorios/imprimir?relatorio=${DAILY_KEY}&${toQuery(filters)}`, '_blank', 'noopener')
-  const preset = (days: number) => last && setFilters({ ...filters, de: minusDays(last, days - 1), ate: last })
-  const activePreset = presets.find((d) => last && filters.ate === last && filters.de === minusDays(last, d - 1))
 
   return (
     <div className="flex flex-col gap-6">
@@ -75,34 +62,7 @@ export function DailySalesPanel() {
             </>
           }
         />
-        <div className="flex flex-col gap-4 border-b border-border p-4 tablet:px-6">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Período rápido">
-            {presets.map((days) => (
-              <Button
-                key={days}
-                size="sm"
-                variant={activePreset === days || (days === 30 && !filters.de && !filters.ate) ? 'primary' : 'secondary'}
-                disabled={!last}
-                onClick={() => preset(days)}
-              >
-                Últimos {days} dias
-              </Button>
-            ))}
-          </div>
-          <div className="grid gap-4 tablet:grid-cols-3">
-            <TextField label="De" type="date" value={filters.de ?? data?.from ?? ''} onChange={(e) => setFilters({ ...filters, de: e.target.value || undefined })} />
-            <TextField label="Até" type="date" value={filters.ate ?? data?.to ?? ''} onChange={(e) => setFilters({ ...filters, ate: e.target.value || undefined })} />
-            <SelectField
-              label="Loja"
-              value={filters.storeId ?? ''}
-              options={[
-                { value: '', label: 'Rede toda' },
-                ...(stores.data ?? []).filter((s) => s.status === 'Active').map((s) => ({ value: String(s.id), label: `${s.code} ${s.name}` })),
-              ]}
-              onChange={(e) => setFilters({ ...filters, storeId: e.target.value ? Number(e.target.value) : undefined })}
-            />
-          </div>
-        </div>
+        <SalesFilters filters={filters} onChange={setFilters} last={data?.lastAvailable} from={data?.from} to={data?.to} />
         {isPending ? (
           <TableLoading />
         ) : isError ? (
@@ -275,40 +235,6 @@ export function DailySalesContent({ report, compact = false, storeId }: { report
           {weekdayChart}
         </ChartCard>
       )}
-    </div>
-  )
-}
-
-/** Variação percentual com seta e sinal, nunca só a cor: verde subiu, vermelho caiu. */
-function Delta({ now, before }: { now: number | null; before: number | null | undefined }) {
-  if (now === null || before === null || before === undefined || before === 0) return <span className="text-caption text-text-subtle">—</span>
-  const change = ((now - before) / before) * 100
-  if (Math.abs(change) < 0.05)
-    return (
-      <span className="inline-flex items-center gap-1 text-caption text-text-subtle">
-        <Minus aria-hidden className="size-3" />
-        igual
-      </span>
-    )
-  const up = change > 0
-  const Icon = up ? ArrowUp : ArrowDown
-  return (
-    <span className={cn('inline-flex items-center gap-1 text-caption tabular-nums', up ? 'text-success' : 'text-error')}>
-      <Icon aria-hidden className="size-3" />
-      {`${up ? '+' : '−'}${formatNumber(Math.abs(change), 1)}%`}
-    </span>
-  )
-}
-
-function Figure({ label, value, delta, hint }: { label: string; value: string; delta: ReactNode; hint?: string }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-md border border-border p-3">
-      <dt className="text-caption text-text-muted">{label}</dt>
-      <dd className="font-display text-heading tabular-nums">{value}</dd>
-      <dd className="flex flex-wrap items-center gap-2 text-caption text-text-subtle">
-        {delta}
-        {hint && <span>{hint}</span>}
-      </dd>
     </div>
   )
 }

@@ -14,12 +14,15 @@ import { cn } from '@/lib/cn'
 import { formatDate } from '@/lib/format'
 import { DAILY_DESCRIPTION, DAILY_TITLE, DailySalesPanel } from './DailySalesReport'
 import { MONTHLY_DESCRIPTION, MONTHLY_TITLE, MonthlyReportPanel } from './MonthlyReport'
+import { QUANTITY_DESCRIPTION, QUANTITY_TITLE, QuantitySalesPanel } from './QuantitySalesReport'
 import { ReportTable } from './ReportTable'
 import {
   DAILY_KEY,
   MONTHLY_KEY,
+  QUANTITY_KEY,
+  quantityReportRoles,
   reportQuery,
-  salesValueRoles,
+  executiveReportRoles,
   useReport,
   useReportCatalog,
   type ReportFilters,
@@ -28,6 +31,7 @@ import {
 
 const MONTHLY_INFO: ReportInfo = { key: MONTHLY_KEY, title: MONTHLY_TITLE, description: MONTHLY_DESCRIPTION, group: 'Resumo do período' }
 const DAILY_INFO: ReportInfo = { key: DAILY_KEY, title: DAILY_TITLE, description: DAILY_DESCRIPTION, group: MONTHLY_INFO.group }
+const QUANTITY_INFO: ReportInfo = { key: QUANTITY_KEY, title: QUANTITY_TITLE, description: QUANTITY_DESCRIPTION, group: 'Vendas' }
 
 /** Central de relatórios (Fase 4, decisões 11 e 42): Excel, CSV e PDF (pela impressão). */
 export function ReportsPage() {
@@ -35,10 +39,17 @@ export function ReportsPage() {
   const { user } = useAuth()
   const [selected, setSelected] = useState<ReportInfo | null>(null)
   const [filters, setFilters] = useState<ReportFilters>({})
-  const canSeeSalesValues = hasRole(user?.role, salesValueRoles)
+  const canSeeExecutiveReports = hasRole(user?.role, executiveReportRoles)
 
-  // O mensal vem primeiro; depois os grupos na ordem do servidor (Situação do estoque, Cobertura e giro, Transferências).
-  const groups: [string, ReportInfo[]][] = [[MONTHLY_INFO.group, canSeeSalesValues ? [MONTHLY_INFO, DAILY_INFO] : [MONTHLY_INFO]]]
+  const canSeeQuantitySales = hasRole(user?.role, quantityReportRoles)
+
+  // Primeiro as vendas: os gerenciais (mensal e vendas por dia) para o Administrador e as vendas em quantidade para
+  // Gerente, Operador e Consulta; depois os grupos na ordem do servidor.
+  const groups: [string, ReportInfo[]][] = canSeeExecutiveReports
+    ? [[MONTHLY_INFO.group, [MONTHLY_INFO, DAILY_INFO]]]
+    : canSeeQuantitySales
+      ? [[QUANTITY_INFO.group, [QUANTITY_INFO]]]
+      : []
   for (const report of catalog.data?.reports ?? []) {
     const group = groups.find(([name]) => name === report.group)
     if (group) group[1].push(report)
@@ -51,7 +62,7 @@ export function ReportsPage() {
         title="Relatórios"
         description="Escolha o relatório, filtre por loja, marca ou categoria e baixe em Excel, CSV ou PDF. Os dados são os da última análise."
       />
-      <div className="grid gap-6 notebook:grid-cols-[18rem_1fr] notebook:items-start">
+      <div className="grid grid-cols-1 gap-6 notebook:grid-cols-[18rem_minmax(0,1fr)] notebook:items-start">
         <Card>
           {catalog.isPending ? (
             <div className="flex flex-col gap-2 p-4">
@@ -84,10 +95,12 @@ export function ReportsPage() {
           )}
         </Card>
 
-        {selected?.key === MONTHLY_KEY ? (
+        {selected?.key === MONTHLY_KEY && canSeeExecutiveReports ? (
           <MonthlyReportPanel />
-        ) : selected?.key === DAILY_KEY && canSeeSalesValues ? (
+        ) : selected?.key === DAILY_KEY && canSeeExecutiveReports ? (
           <DailySalesPanel />
+        ) : selected?.key === QUANTITY_KEY && canSeeQuantitySales ? (
+          <QuantitySalesPanel />
         ) : selected ? (
           <ReportPanel report={selected} filters={filters} onFilters={setFilters} brands={catalog.data?.brands ?? []} />
         ) : (

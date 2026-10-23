@@ -74,6 +74,7 @@ public static class DependencyInjection
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IMonthlyReportService, MonthlyReportService>();
         services.AddScoped<IDailySalesReportService, DailySalesReportService>();
+        services.AddScoped<IQuantitySalesReportService, QuantitySalesReportService>();
 
         return services;
     }
