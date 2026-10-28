@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Paged } from '@/features/catalog/catalogApi'
 import { apiRequest } from '@/lib/api'
 import { toQuery } from '@/lib/query'
@@ -69,17 +69,16 @@ export const periodLabel = (season: Pick<Season, 'startMonth' | 'endMonth' | 'wo
 
 export const useSeasons = () => useQuery({ queryKey: ['seasonality', 'seasons'], queryFn: () => apiRequest<Season[]>('/seasonality/seasons') })
 
+/** Sem manter a lista anterior enquanto carrega: ao trocar de época, a tela não pode mostrar as sugestões da outra. */
 export const useSeasonalSuggestions = (filters: SeasonFilter & { search?: string; page: number }) =>
   useQuery({
     queryKey: ['seasonality', 'suggestions', filters],
-    placeholderData: keepPreviousData,
     queryFn: () => apiRequest<Paged<SeasonalSuggestion>>(`/seasonality/suggestions?${toQuery({ ...filters, pageSize: 50 })}`),
   })
 
 export const useSeasonalProducts = (filters: { seasonId?: number; outOfSeasonOnly?: boolean; search?: string; page: number }) =>
   useQuery({
     queryKey: ['seasonality', 'products', filters],
-    placeholderData: keepPreviousData,
     queryFn: () => apiRequest<Paged<SeasonalProduct>>(`/seasonality/products?${toQuery({ ...filters, pageSize: 50 })}`),
   })
 

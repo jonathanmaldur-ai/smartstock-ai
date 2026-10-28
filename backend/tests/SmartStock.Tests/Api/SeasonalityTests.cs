@@ -56,6 +56,25 @@ public sealed class SeasonalityTests(SmartStockApiFactory factory)
     }
 
     [Fact]
+    public async Task Filtro_por_epoca_so_traz_as_sugestoes_daquela_epoca()
+    {
+        using var admin = await factory.CreateAdminClientAsync();
+        var (first, second) = (UniqueCode("SZ"), UniqueCode("SZ"));
+        var seasonA = await CreateSeasonAsync(admin, first);
+        var seasonB = await CreateSeasonAsync(admin, second);
+        var (productA, productB) = await PrepareRuptureAsync(admin, $"ENFEITE {first}", $"ENFEITE {second}");
+        await RunAnalysisAsync(admin);
+
+        var onlyA = await SuggestionsAsync(admin, seasonA.Id);
+        var onlyB = await SuggestionsAsync(admin, seasonB.Id);
+
+        Assert.Equal(productA, Assert.Single(onlyA).Code);
+        Assert.Equal(productB, Assert.Single(onlyB).Code);
+        await admin.PostAsJsonAsync("/api/seasonality/suggestions/decision", new { seasonId = seasonA.Id, confirm = false });
+        await admin.PostAsJsonAsync("/api/seasonality/suggestions/decision", new { seasonId = seasonB.Id, confirm = false });
+    }
+
+    [Fact]
     public async Task Sugestao_rejeitada_nao_volta_na_proxima_analise()
     {
         using var admin = await factory.CreateAdminClientAsync();
@@ -82,18 +101,28 @@ public sealed class SeasonalityTests(SmartStockApiFactory factory)
     }
 
     /// <summary>Produto novo: Mogi Mirim sem estoque vendendo 365/ano; Depósito com 100 un.</summary>
-    private static async Task<string> PrepareRuptureAsync(HttpClient admin, string description)
+    private static async Task<string> PrepareRuptureAsync(HttpClient admin, string description) =>
+        (await PrepareProductsAsync(admin, [description]))[0];
+
+    private static async Task<(string, string)> PrepareRuptureAsync(HttpClient admin, string first, string second)
+    {
+        var products = await PrepareProductsAsync(admin, [first, second]);
+        return (products[0], products[1]);
+    }
+
+    /// <summary>Os produtos entram no mesmo arquivo de estoque e de vendas: cada importação é uma foto completa.</summary>
+    private static async Task<List<string>> PrepareProductsAsync(HttpClient admin, string[] descriptions)
     {
         var brand = UniqueCode("6");
-        var product = UniqueCode("793");
+        var products = descriptions.Select(_ => UniqueCode("793")).ToList();
         await admin.ImportAndConfirmAsync("Brands", "Marca.xlsx", Xlsx(BrandHeaders, [brand, $"MARCA {brand}", "1"]));
-        await admin.ImportAndConfirmAsync("Products", "Produtos.xlsx",
-            Xlsx(ProductHeaders, [product, description, brand, "PC", "1", "BRINQUEDOS", "OUTROS", "R", ""]));
+        await admin.ImportAndConfirmAsync("Products", "Produtos.xlsx", Xlsx(ProductHeaders,
+            [.. products.Zip(descriptions, (p, d) => new[] { p, d, brand, "PC", "1", "BRINQUEDOS", "OUTROS", "R", "" })]));
         await admin.ImportAndConfirmAsync("Stock", "Estoque.xlsx",
-            Xlsx(["Codigo do Produto", "05 DEPOSITO", "06 MOGI MIRIM"], [product, "100", "0"]), Today);
+            Xlsx(["Codigo do Produto", "05 DEPOSITO", "06 MOGI MIRIM"], [.. products.Select(p => new[] { p, "100", "0" })]), Today);
         await admin.ImportAndConfirmAsync("Sales", "vendas.xlsx",
-            XlsxSheet("06 MOGI MIRIM", ["ivpro", "prodes", "valor", "qtde"], [product, "P", "10", "365"]), Today);
-        return product;
+            XlsxSheet("06 MOGI MIRIM", ["ivpro", "prodes", "valor", "qtde"], [.. products.Select(p => new[] { p, "P", "10", "365" })]), Today);
+        return products;
     }
 
     private static async Task RunAnalysisAsync(HttpClient admin) => (await admin.PostAsync("/api/analysis", null)).EnsureSuccessStatusCode();

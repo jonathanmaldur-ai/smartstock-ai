@@ -115,7 +115,6 @@ internal sealed class SeasonalityService(SmartStockDbContext db, IAuditLogger au
     public async Task<PagedResult<SeasonalSuggestionDto>> ListSuggestionsAsync(SeasonalSuggestionQuery query, CancellationToken cancellationToken = default)
     {
         var (page, pageSize) = (Math.Max(1, query.Page), Math.Clamp(query.PageSize, 1, MaxPageSize));
-        var latest = await LatestAnalysisIdAsync(cancellationToken);
         var filtered =
             from s in Pending(query.SeasonId, query.WithoutSeason, query.Kind)
             join p in db.Products on s.ProductId equals p.Id
@@ -126,23 +125,25 @@ internal sealed class SeasonalityService(SmartStockDbContext db, IAuditLogger au
             filtered = filtered.Where(x => x.p.Code.StartsWith(term) || EF.Functions.ILike(x.p.Description, $"%{term}%"));
         }
 
-        var total = await filtered.CountAsync(cancellationToken);
+        // Alguns milhares no máximo. O estoque e a venda vêm de uma soma só, depois: calcular por linha dentro da
+        // consulta passava de 30 segundos com a época filtrada.
         var rows = await filtered
             .Select(x => new
             {
                 x.s.Id, x.s.ProductId, x.p.Code, x.p.Description, Brand = x.p.Brand.Name, Category = x.p.Category.Name, x.s.SeasonId,
-                SeasonName = x.s.Season != null ? x.s.Season.Name : null, x.s.Kind, x.s.Evidence, x.s.UpdatedAt,
-                Stock = db.StockPositions.Where(sp => sp.AnalysisId == latest && sp.ProductId == x.s.ProductId && sp.Stock > 0).Sum(sp => (decimal?)sp.Stock) ?? 0,
-                Sold = db.StockPositions.Where(sp => sp.AnalysisId == latest && sp.ProductId == x.s.ProductId).Sum(sp => (decimal?)sp.Sold12Months) ?? 0
+                SeasonName = x.s.Season != null ? x.s.Season.Name : null, x.s.Kind, x.s.Evidence, x.s.UpdatedAt
             })
-            .OrderBy(x => x.SeasonName == null).ThenBy(x => x.SeasonName).ThenByDescending(x => x.Stock).ThenBy(x => x.Description)
-            .Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(cancellationToken);
+        var totals = await NetworkTotalsAsync(rows.Select(r => r.ProductId).Distinct().ToList(), cancellationToken);
 
-        var items = rows.Select(r => new SeasonalSuggestionDto(
-            r.Id, r.ProductId, r.Code, r.Description, r.Brand, r.Category, r.SeasonId, r.SeasonName, r.Kind.ToString(), r.Evidence,
-            r.Stock, r.Sold, r.UpdatedAt)).ToList();
-        return new PagedResult<SeasonalSuggestionDto>(items, page, pageSize, total);
+        var items = rows
+            .Select(r => new SeasonalSuggestionDto(
+                r.Id, r.ProductId, r.Code, r.Description, r.Brand, r.Category, r.SeasonId, r.SeasonName, r.Kind.ToString(), r.Evidence,
+                totals.GetValueOrDefault(r.ProductId).Stock, totals.GetValueOrDefault(r.ProductId).Sold, r.UpdatedAt))
+            .OrderBy(r => r.SeasonName is null).ThenBy(r => r.SeasonName).ThenByDescending(r => r.Stock).ThenBy(r => r.Description)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .ToList();
+        return new PagedResult<SeasonalSuggestionDto>(items, page, pageSize, rows.Count);
     }
 
     public async Task<Result<int>> DecideAsync(SeasonalDecision decision, CancellationToken cancellationToken = default)
