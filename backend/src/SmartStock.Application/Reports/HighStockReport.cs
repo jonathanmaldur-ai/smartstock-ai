@@ -22,7 +22,7 @@ public static class HighStockReport
         new("Subcategoria", ReportColumnKind.Text), new("Total (un.)", ReportColumnKind.Decimal),
         new("Negativos na rede", ReportColumnKind.Decimal), new("Total líquido", ReportColumnKind.Decimal),
         new("Venda 30 dias", ReportColumnKind.Decimal), new("Cobertura (dias)", ReportColumnKind.Decimal),
-        new("Conferir estoque", ReportColumnKind.Text)
+        new("Conferir estoque", ReportColumnKind.Text), new("Época", ReportColumnKind.Text)
     ];
 
     public const int GroupColumn = 0;

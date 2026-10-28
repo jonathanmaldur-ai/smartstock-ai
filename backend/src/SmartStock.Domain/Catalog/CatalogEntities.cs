@@ -57,6 +57,10 @@ public class Product
     /// <summary>Fora de época (ex.: figurinhas da Copa): não gera sugestão de transferência nem de compra (decisão 37).</summary>
     public bool IsSeasonal { get; set; }
 
+    /// <summary>Época confirmada pelo Administrador (decisão 65): fora dela, o produto sai das sugestões.</summary>
+    public int? SeasonId { get; set; }
+    public Season? Season { get; set; }
+
     public int BrandId { get; set; }
     public Brand Brand { get; set; } = null!;
     public int CategoryId { get; set; }

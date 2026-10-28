@@ -13,6 +13,7 @@ export type StockSituation =
   | 'Stagnant'
   | 'NoMovement'
   | 'Warehouse'
+  | 'OutOfSeason'
 export type AlertPriority = 'None' | 'Low' | 'Medium' | 'High' | 'Critical'
 export type SuggestionStatus = 'Suggested' | 'Approved' | 'Rejected' | 'Completed' | 'Superseded'
 
@@ -29,6 +30,7 @@ export const situationInfo: Record<StockSituation, { label: string; tone: Tone; 
   Stagnant: { label: 'Parado', tone: 'neutral', description: 'Tem estoque e não vendeu em 12 meses' },
   NoMovement: { label: 'Sem movimento', tone: 'neutral', description: 'Sem venda e sem estoque positivo' },
   Warehouse: { label: 'Depósito', tone: 'neutral', description: 'Não vende, abastece a rede' },
+  OutOfSeason: { label: 'Sobra de época', tone: 'warning', description: 'Produto sazonal fora da época: sem sugestões, candidato a promoção' },
 }
 
 export const priorityInfo: Record<AlertPriority, { label: string; tone: Tone }> = {

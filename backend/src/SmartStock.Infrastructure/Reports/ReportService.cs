@@ -270,7 +270,11 @@ internal sealed class ReportService(SmartStockDbContext db) : IReportService
             .ToDictionary(p => (p.ProductId, p.StoreId), p => p.Stock);
         var products = await db.Products.AsNoTracking()
             .Where(p => ids.Contains(p.Id))
-            .Select(p => new { p.Id, p.Code, p.Description, p.Reference, Brand = p.Brand.Name, Category = p.Category.Name, Subcategory = p.Subcategory != null ? p.Subcategory.Name : null })
+            .Select(p => new
+            {
+                p.Id, p.Code, p.Description, p.Reference, Brand = p.Brand.Name, Category = p.Category.Name,
+                Subcategory = p.Subcategory != null ? p.Subcategory.Name : null, p.Season, p.IsSeasonal
+            })
             .ToDictionaryAsync(p => p.Id, cancellationToken);
         var sold30Days = await Sold30DaysAsync(ids, cancellationToken);
 
@@ -285,7 +289,8 @@ internal sealed class ReportService(SmartStockDbContext db) : IReportService
                 [
                     HighStockReport.GroupOf(p.Category), p.Code, p.Description, p.Reference, p.Brand, p.Category, p.Subcategory, x.Total,
                     x.Negatives, x.Total + x.Negatives, sold30Days?.GetValueOrDefault(x.ProductId), roundedCoverage,
-                    HighStockReport.CheckReason(x.Total, x.Negatives, roundedCoverage)
+                    HighStockReport.CheckReason(x.Total, x.Negatives, roundedCoverage),
+                    SeasonLabel(p.Season, p.IsSeasonal, c.Analysis.AnalysisDate)
                 ];
                 return fixedValues.Concat(stores.Select(s => (object?)stockByStore.GetValueOrDefault((x.ProductId, s.Id)))).ToArray();
             })
@@ -294,6 +299,15 @@ internal sealed class ReportService(SmartStockDbContext db) : IReportService
         var storeColumns = stores.Select(s => new ReportColumn($"{s.Code} {s.Name}", ReportColumnKind.Decimal));
         return ([.. HighStockReport.FixedColumns, .. storeColumns], rows, ordered.Count);
     }
+
+    /// <summary>Época do produto na data da análise (decisão 65): "Natal (em época)", "Copa do Mundo (fora de época)"...</summary>
+    private static string? SeasonLabel(Domain.Catalog.Season? season, bool markedOutOfSeason, DateOnly date) =>
+        SeasonalRules.StateOf(season, markedOutOfSeason, date) switch
+        {
+            SeasonState.InSeason => $"{season!.Name} (em época)",
+            SeasonState.OutOfSeason => season is null || markedOutOfSeason ? "Fora de época" : $"{season.Name} (fora de época)",
+            _ => null
+        };
 
     /// <summary>Venda dos últimos 30 dias com venda importada por produto (decisão 52); null sem vendas por dia.</summary>
     private async Task<Dictionary<int, decimal>?> Sold30DaysAsync(List<int> ids, CancellationToken cancellationToken)

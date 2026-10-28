@@ -28,6 +28,7 @@ const ReportsPage = lazy(() => import('@/features/reports/ReportsPage').then((m)
 const ReportPrintPage = lazy(() => import('@/features/reports/ReportPrintPage').then((m) => ({ default: m.ReportPrintPage })))
 const AssistantPage = lazy(() => import('@/features/assistant/AssistantPage').then((m) => ({ default: m.AssistantPage })))
 const NegativeStockPage = lazy(() => import('@/features/analysis/NegativeStockPage').then((m) => ({ default: m.NegativeStockPage })))
+const SeasonalityPage = lazy(() => import('@/features/seasonality/SeasonalityPage').then((m) => ({ default: m.SeasonalityPage })))
 const AlertsPage = lazy(() => import('@/features/analysis/AlertsPage').then((m) => ({ default: m.AlertsPage })))
 
 function PageLoading() {
@@ -90,6 +91,7 @@ export const routes: RouteObject[] = [
       { path: 'sugestoes', element: <LazyPage><SuggestionsPage /></LazyPage> },
       { path: 'compras', element: <LazyPage><PurchasesPage /></LazyPage> },
       { path: 'negativos', element: <LazyPage><NegativeStockPage /></LazyPage> },
+      { path: 'sazonalidade', element: <LazyPage><SeasonalityPage /></LazyPage> },
       { path: 'alertas', element: <LazyPage><AlertsPage /></LazyPage> },
       { path: 'produtos', element: <LazyPage><ProductsPage /></LazyPage> },
       { path: 'marcas', element: <LazyPage><BrandsPage /></LazyPage> },

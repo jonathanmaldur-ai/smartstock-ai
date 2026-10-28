@@ -80,7 +80,38 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.HasOne(p => p.Brand).WithMany().HasForeignKey(p => p.BrandId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(p => p.Category).WithMany().HasForeignKey(p => p.CategoryId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(p => p.Subcategory).WithMany().HasForeignKey(p => p.SubcategoryId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(p => p.Season).WithMany().HasForeignKey(p => p.SeasonId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ImportBatch>().WithMany().HasForeignKey(p => p.LastImportId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class SeasonConfiguration : IEntityTypeConfiguration<Season>
+{
+    public void Configure(EntityTypeBuilder<Season> builder)
+    {
+        builder.ToTable("seasons", t => t.HasCheckConstraint("ck_seasons_months", "start_month BETWEEN 1 AND 12 AND end_month BETWEEN 1 AND 12"));
+        builder.Property(s => s.Name).HasMaxLength(60).IsRequired();
+        builder.HasIndex(s => s.Name).IsUnique();
+        builder.Property(s => s.Keywords).HasMaxLength(1000).IsRequired();
+        builder.Property(s => s.UpdatedByEmail).HasMaxLength(256);
+        builder.Ignore(s => s.KeywordList);
+        builder.Property(s => s.MatchDescription).HasDefaultValue(true);
+    }
+}
+
+internal sealed class SeasonalSuggestionConfiguration : IEntityTypeConfiguration<SeasonalSuggestion>
+{
+    public void Configure(EntityTypeBuilder<SeasonalSuggestion> builder)
+    {
+        builder.ToTable("seasonal_suggestions");
+        builder.Property(s => s.Kind).HasConversion<string>().HasMaxLength(20);
+        builder.Property(s => s.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(s => s.Evidence).HasMaxLength(300).IsRequired();
+        builder.Property(s => s.DecidedByEmail).HasMaxLength(256);
+        builder.HasIndex(s => new { s.Status, s.SeasonId });
+        builder.HasIndex(s => s.ProductId);
+        builder.HasOne<Product>().WithMany().HasForeignKey(s => s.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(s => s.Season).WithMany().HasForeignKey(s => s.SeasonId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

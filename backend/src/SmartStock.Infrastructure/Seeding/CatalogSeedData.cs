@@ -54,6 +54,22 @@ internal static class CatalogSeedData
         ["RELÓGIO DE PONTO"] = ["RELOGIO DE PONT"]
     };
 
+    /// <summary>
+    /// Épocas de venda (decisão 65), aprovadas pelo responsável em 28/10/2026: nome, meses e palavras-chave.
+    /// Criadas só se a tabela estiver vazia; depois, o Administrador edita na tela Sazonalidade.
+    /// </summary>
+    /// Volta às aulas não procura na descrição: "ônibus escolar" e "ache encaixe escolar" são brinquedos do ano todo.
+    public static readonly IReadOnlyList<(string Name, int Start, int End, bool WorldCupOnly, bool MatchDescription, string[] Keywords)> Seasons =
+    [
+        ("Copa do Mundo", 5, 7, true, true, ["FIGURINHAS", "COPA", "COPA DO MUNDO"]),
+        ("Páscoa", 2, 4, false, true, ["PASCOA", "OVO DE PASCOA"]),
+        ("Natal", 10, 12, false, true, ["NATAL", "NATALINO", "NATALINA", "PAPAI NOEL"]),
+        ("Carnaval", 1, 2, false, true, ["CARNAVAL"]),
+        ("Festa Junina", 5, 7, false, true, ["FESTA JUNINA", "JUNINA", "JUNINO", "ESTALOS"]),
+        ("Halloween", 9, 10, false, true, ["HALLOWEEN", "HALLOWEEM"]),
+        ("Volta às aulas", 12, 3, false, false, ["ESCOLAR"])
+    ];
+
     /// <summary>Fora das análises: itens que não são mercadoria e bebidas. Alimentícios são mantidos (decisão 23).</summary>
     public static readonly IReadOnlyList<string> ExcludedCategories =
     [

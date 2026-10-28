@@ -941,6 +941,10 @@ namespace SmartStock.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("reference");
 
+                    b.Property<int?>("SeasonId")
+                        .HasColumnType("integer")
+                        .HasColumnName("season_id");
+
                     b.Property<int?>("SubcategoryId")
                         .HasColumnType("integer")
                         .HasColumnName("subcategory_id");
@@ -970,10 +974,145 @@ namespace SmartStock.Infrastructure.Persistence.Migrations
                     b.HasIndex("LastImportId")
                         .HasDatabaseName("ix_products_last_import_id");
 
+                    b.HasIndex("SeasonId")
+                        .HasDatabaseName("ix_products_season_id");
+
                     b.HasIndex("SubcategoryId")
                         .HasDatabaseName("ix_products_subcategory_id");
 
                     b.ToTable("products", (string)null);
+                });
+
+            modelBuilder.Entity("SmartStock.Domain.Catalog.Season", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EndMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("end_month");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Keywords")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("keywords");
+
+                    b.Property<bool>("MatchDescription")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("match_description");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("StartMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("start_month");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("updated_by_email");
+
+                    b.Property<bool>("WorldCupOnly")
+                        .HasColumnType("boolean")
+                        .HasColumnName("world_cup_only");
+
+                    b.HasKey("Id")
+                        .HasName("pk_seasons");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_seasons_name");
+
+                    b.ToTable("seasons", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_seasons_months", "start_month BETWEEN 1 AND 12 AND end_month BETWEEN 1 AND 12");
+                        });
+                });
+
+            modelBuilder.Entity("SmartStock.Domain.Catalog.SeasonalSuggestion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<string>("DecidedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("decided_by_email");
+
+                    b.Property<string>("Evidence")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("evidence");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_id");
+
+                    b.Property<int?>("SeasonId")
+                        .HasColumnType("integer")
+                        .HasColumnName("season_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_seasonal_suggestions");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_seasonal_suggestions_product_id");
+
+                    b.HasIndex("SeasonId")
+                        .HasDatabaseName("ix_seasonal_suggestions_season_id");
+
+                    b.HasIndex("Status", "SeasonId")
+                        .HasDatabaseName("ix_seasonal_suggestions_status_season_id");
+
+                    b.ToTable("seasonal_suggestions", (string)null);
                 });
 
             modelBuilder.Entity("SmartStock.Domain.Catalog.Store", b =>
@@ -1975,6 +2114,12 @@ namespace SmartStock.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_products_import_batches_last_import_id");
 
+                    b.HasOne("SmartStock.Domain.Catalog.Season", "Season")
+                        .WithMany()
+                        .HasForeignKey("SeasonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_products_seasons_season_id");
+
                     b.HasOne("SmartStock.Domain.Catalog.Subcategory", "Subcategory")
                         .WithMany()
                         .HasForeignKey("SubcategoryId")
@@ -1985,7 +2130,27 @@ namespace SmartStock.Infrastructure.Persistence.Migrations
 
                     b.Navigation("Category");
 
+                    b.Navigation("Season");
+
                     b.Navigation("Subcategory");
+                });
+
+            modelBuilder.Entity("SmartStock.Domain.Catalog.SeasonalSuggestion", b =>
+                {
+                    b.HasOne("SmartStock.Domain.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_seasonal_suggestions_products_product_id");
+
+                    b.HasOne("SmartStock.Domain.Catalog.Season", "Season")
+                        .WithMany()
+                        .HasForeignKey("SeasonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_seasonal_suggestions_seasons_season_id");
+
+                    b.Navigation("Season");
                 });
 
             modelBuilder.Entity("SmartStock.Domain.Imports.ImportBatch", b =>

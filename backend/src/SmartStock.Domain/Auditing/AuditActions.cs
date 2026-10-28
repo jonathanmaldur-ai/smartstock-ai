@@ -24,6 +24,11 @@ public static class AuditActions
     public const string CategoryExclusionChanged = "category.exclusion_changed";
     public const string CategoryMerged = "category.merged";
     public const string ProductSeasonalChanged = "product.seasonal_changed";
+    public const string ProductSeasonChanged = "product.season_changed";
+    public const string SeasonCreated = "season.created";
+    public const string SeasonUpdated = "season.updated";
+    public const string SeasonalSuggestionsConfirmed = "seasonal_suggestion.confirmed";
+    public const string SeasonalSuggestionsRejected = "seasonal_suggestion.rejected";
 
     public const string ImportUploaded = "import.uploaded";
     public const string ImportRejected = "import.rejected";

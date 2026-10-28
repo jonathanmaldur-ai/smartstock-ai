@@ -23,6 +23,8 @@ internal sealed class StockAnalysisService(
     CompletedTransferMatcher completedMatcher,
     AlertCalculator alertCalculator,
     AlertNotifier alertNotifier,
+    RecentSalesLoader recentSales,
+    SeasonalDetector seasonalDetector,
     ILogger<StockAnalysisService> logger) : IStockAnalysisService
 {
     public async Task<Result<AnalysisSummary>> RunAsync(CancellationToken cancellationToken = default)
@@ -36,7 +38,7 @@ internal sealed class StockAnalysisService(
 
         var parameters = await db.StockParameters.AsNoTracking().SingleAsync(cancellationToken);
         var today = DateOnly.FromDateTime(clock.GetLocalNow().DateTime);
-        var input = await LoadInputAsync(stockBatch.Id, cancellationToken);
+        var input = await LoadInputAsync(stockBatch.Id, today, cancellationToken);
         var result = Calculate(input, parameters, today.DayNumber - stockBatch.ReferenceDate.Value.DayNumber);
         var analysisId = Guid.NewGuid();
         var negatives = await negativeCalculator.CalculateAsync(
@@ -69,13 +71,16 @@ internal sealed class StockAnalysisService(
         };
 
         var superseded = await SaveAsync(analysis, result, negatives, alerts, cancellationToken);
+        var seasonalSuggestions = await seasonalDetector.DetectAsync(
+            today, result.Positions.Select(p => new SeasonalDetector.ProductSales(p.ProductId, p.StoreId, p.Sold)).ToList(), cancellationToken);
 
         await audit.LogAsync(new AuditEntry(
             AuditActions.AnalysisGenerated, AuditResult.Success, "StockAnalysis", analysis.Id.ToString(),
             Details: new
             {
                 analysis.StockDate, analysis.AnalysisDate, analysis.PositionCount, analysis.SuggestionCount,
-                analysis.SuggestedUnits, analysis.PurchaseCount, alerts = alerts.Count, supersededSuggestions = superseded, completedSuggestions = completed
+                analysis.SuggestedUnits, analysis.PurchaseCount, alerts = alerts.Count, supersededSuggestions = superseded, completedSuggestions = completed,
+                seasonalSuggestions
             }),
             cancellationToken);
         logger.LogInformation("Análise {AnalysisId}: {Positions} posições, {Suggestions} sugestões.",
@@ -204,17 +209,22 @@ internal sealed class StockAnalysisService(
         return suggestions.Count;
     }
 
-    private async Task<AnalysisInput> LoadInputAsync(Guid stockImportId, CancellationToken cancellationToken)
+    private async Task<AnalysisInput> LoadInputAsync(Guid stockImportId, DateOnly today, CancellationToken cancellationToken)
     {
         var stores = await db.Stores.AsNoTracking().Where(s => s.Status == StoreStatus.Active).ToDictionaryAsync(s => s.Id, cancellationToken);
         var analysedProducts = (await db.Products.AsNoTracking()
             .Where(p => !p.Category.ExcludedFromAnalysis)
             .Select(p => p.Id)
             .ToListAsync(cancellationToken)).ToHashSet();
-        var seasonal = (await db.Products.AsNoTracking()
-            .Where(p => p.IsSeasonal)
-            .Select(p => p.Id)
-            .ToListAsync(cancellationToken)).ToHashSet();
+        // Decisões 37 e 65: o produto marcado à mão ou com época confirmada pode estar fora ou dentro da época hoje.
+        var seasonStates = (await db.Products.AsNoTracking()
+                .Where(p => p.IsSeasonal || p.SeasonId != null)
+                .Select(p => new { p.Id, p.IsSeasonal, p.Season })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(p => p.Id, p => SeasonalRules.StateOf(p.Season, p.IsSeasonal, today));
+        var peakSales = seasonStates.ContainsValue(SeasonState.InSeason)
+            ? await recentSales.LoadAsync(SeasonalRules.PeakWindowDays, today, cancellationToken)
+            : null;
 
         var salesBatchIds = (await CurrentImports.SalesBatchesAsync(db, cancellationToken)).Values.Select(b => b.Id).ToList();
         var stock = await db.StockLevels.AsNoTracking()
@@ -245,7 +255,8 @@ internal sealed class StockAnalysisService(
         return new AnalysisInput(
             stores,
             products,
-            seasonal,
+            seasonStates,
+            peakSales,
             inTransit.GroupBy(t => t.ProductId).ToDictionary(
                 g => g.Key, g => (IReadOnlyList<InTransit>)g.Select(t => new InTransit(t.OriginStoreId, t.DestinationStoreId, t.Quantity)).ToList()));
     }
@@ -258,20 +269,25 @@ internal sealed class StockAnalysisService(
 
         foreach (var (productId, byStore) in input.Products)
         {
+            var season = input.SeasonStates.GetValueOrDefault(productId, SeasonState.None);
             var stores = byStore
                 .Select(e =>
                 {
                     var store = input.Stores[e.Key];
-                    return new StoreStock(store.Id, $"{store.Code} {store.Name}", store.Type == StoreType.Warehouse, e.Value.Stock, e.Value.Sold);
+                    return new StoreStock(store.Id, $"{store.Code} {store.Name}", store.Type == StoreType.Warehouse, e.Value.Stock,
+                        SoldForAnalysis(input, productId, store.Id, e.Value.Sold, season));
                 })
                 .ToList();
 
             foreach (var s in stores)
-                result.Positions.Add(new PositionRow(productId, s.StoreId, s.Stock, s.Sold12Months,
-                    rules.Evaluate(s.IsWarehouse, s.Stock, s.Sold12Months, daysSinceStock)));
+            {
+                var metrics = rules.Evaluate(s.IsWarehouse, s.Stock, s.Sold12Months, daysSinceStock);
+                result.Positions.Add(new PositionRow(productId, s.StoreId, s.Stock, byStore[s.StoreId].Sold,
+                    season == SeasonState.OutOfSeason ? SeasonalRules.AsOutOfSeason(metrics) : metrics));
+            }
 
-            // Decisão 37: produto sazonal continua na situação do estoque, mas sem sugestões.
-            if (input.Seasonal.Contains(productId))
+            // Decisões 37 e 65: fora da época, o produto continua na situação do estoque ("Sobra de época"), mas sem sugestões.
+            if (season == SeasonState.OutOfSeason)
                 continue;
 
             var plan = planner.Plan(stores, input.InTransit.GetValueOrDefault(productId) ?? [], daysSinceStock);
@@ -280,6 +296,12 @@ internal sealed class StockAnalysisService(
         }
         return result;
     }
+
+    /// <summary>Na época (decisão 65), a venda dos últimos 30 dias anualizada vale quando é maior que a de 12 meses.</summary>
+    private static decimal SoldForAnalysis(AnalysisInput input, int productId, int storeId, decimal sold12Months, SeasonState season) =>
+        season == SeasonState.InSeason && input.PeakSales is { } peak && peak.CoveredStores.Contains(storeId)
+            ? SeasonalRules.PeakSold(sold12Months, peak.SoldIn(productId, storeId))
+            : sold12Months;
 
     /// <returns>Quantas sugestões pendentes de análises anteriores foram substituídas.</returns>
     private async Task<int> SaveAsync(
@@ -466,7 +488,8 @@ internal sealed class StockAnalysisService(
     private sealed record AnalysisInput(
         Dictionary<int, Store> Stores,
         Dictionary<int, Dictionary<int, (decimal Stock, decimal Sold)>> Products,
-        HashSet<int> Seasonal,
+        Dictionary<int, SeasonState> SeasonStates,
+        RecentSalesLoader.Window? PeakSales,
         Dictionary<int, IReadOnlyList<InTransit>> InTransit);
 
     private sealed record PositionRow(int ProductId, int StoreId, decimal Stock, decimal Sold, PositionMetrics Metrics);

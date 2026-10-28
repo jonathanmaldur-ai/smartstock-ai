@@ -25,7 +25,7 @@ import {
 } from './analysisApi'
 
 /** Ordem dos cartões: do mais urgente ao menos urgente. */
-const situationOrder: readonly StockSituation[] = ['Rupture', 'CriticalCoverage', 'BelowMinimum', 'Normal', 'Excess', 'Stagnant']
+const situationOrder: readonly StockSituation[] = ['Rupture', 'CriticalCoverage', 'BelowMinimum', 'Normal', 'Excess', 'Stagnant', 'OutOfSeason']
 
 export function StockSituationPage() {
   const [filters, setFilters] = useState<Omit<PositionFilters, 'page' | 'search'>>({})
@@ -77,7 +77,7 @@ export function StockSituationPage() {
 
       {summary.data?.analysisId && <h2 className="mb-3 text-subtitle text-text">Detalhe por situação</h2>}
       {summary.data?.analysisId && (
-        <div className="mb-6 grid grid-cols-2 gap-3 tablet:grid-cols-3 notebook:grid-cols-6">
+        <div className="mb-6 grid grid-cols-2 gap-3 tablet:grid-cols-4 desktop:grid-cols-7">
           {situationOrder.map((situation) => {
             const count = summary.data.situations.find((s) => s.situation === situation)?.count ?? 0
             const selected = filters.situation === situation

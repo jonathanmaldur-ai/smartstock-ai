@@ -127,7 +127,10 @@ public enum StockSituation
     NoMovement = 7,
 
     /// <summary>Depósito: não vende, só abastece.</summary>
-    Warehouse = 8
+    Warehouse = 8,
+
+    /// <summary>Produto sazonal fora da época com estoque: candidato a queima, sem sugestões (decisão 65).</summary>
+    OutOfSeason = 9
 }
 
 public enum AlertPriority

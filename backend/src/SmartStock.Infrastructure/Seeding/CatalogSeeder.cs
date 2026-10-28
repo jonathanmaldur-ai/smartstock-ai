@@ -41,6 +41,15 @@ internal sealed class CatalogSeeder(SmartStockDbContext db)
                 category.Aliases.Add(new CategoryAlias { Alias = alias });
         }
 
+        if (!await db.Seasons.AnyAsync(cancellationToken))
+        {
+            db.Seasons.AddRange(CatalogSeedData.Seasons.Select(s => new Season
+            {
+                Name = s.Name, StartMonth = s.Start, EndMonth = s.End, WorldCupOnly = s.WorldCupOnly, MatchDescription = s.MatchDescription,
+                Keywords = Season.NormalizeKeywords(s.Keywords), UpdatedAt = DateTimeOffset.UtcNow
+            }));
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 }

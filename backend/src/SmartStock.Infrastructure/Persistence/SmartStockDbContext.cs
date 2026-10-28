@@ -24,6 +24,8 @@ public class SmartStockDbContext(DbContextOptions<SmartStockDbContext> options)
     public DbSet<CategoryAlias> CategoryAliases => Set<CategoryAlias>();
     public DbSet<Subcategory> Subcategories => Set<Subcategory>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<Season> Seasons => Set<Season>();
+    public DbSet<SeasonalSuggestion> SeasonalSuggestions => Set<SeasonalSuggestion>();
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<ImportIssue> ImportIssues => Set<ImportIssue>();
     public DbSet<StockLevel> StockLevels => Set<StockLevel>();
