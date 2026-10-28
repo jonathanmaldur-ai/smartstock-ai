@@ -88,9 +88,27 @@ public sealed class ReportTests(SmartStockApiFactory factory)
         Assert.Equal("Brinquedos", row[0].GetString());
         Assert.Equal(product, row[1].GetString());
         Assert.Equal(350m, row[7].GetDecimal()); // 250 + 100; o negativo de Mogi Mirim não entra
+        Assert.Equal(-20m, row[8].GetDecimal()); // negativos na rede
+        Assert.Equal(330m, row[9].GetDecimal()); // total líquido
+        Assert.Equal(JsonValueKind.Null, row[12].ValueKind); // −20 é menos de 10% de 350: nada a conferir
         Assert.Contains("Mais de 300 unidades", report.FilterSummary);
         Assert.Equal(0, above400.TotalRows);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
+    public async Task Estoque_alto_marca_para_conferir_o_negativo_espelhado_e_lista_na_aba_propria()
+    {
+        using var admin = await factory.CreateAdminClientAsync();
+        var (product, brandId) = await PrepareHighStockAsync(admin, matriz: "79101", deposito: "8", mogiMirim: "-79056");
+
+        var row = Assert.Single((await admin.GetFromJsonAsync<ReportDto>($"/api/reports/estoque-alto?brandId={brandId}", ApiClientExtensions.Json))!.Rows);
+        var excel = await admin.GetAsync($"/api/reports/estoque-alto/excel?brandId={brandId}");
+
+        Assert.Equal(53m, row[9].GetDecimal()); // total líquido, como no ERP
+        Assert.Equal("Negativos altos", row[12].GetString());
+        using var workbook = new ClosedXML.Excel.XLWorkbook(await excel.Content.ReadAsStreamAsync());
+        Assert.Equal(product, workbook.Worksheet("Conferir estoque").Cell(5, 2).GetString());
     }
 
     [Fact]
@@ -141,7 +159,8 @@ public sealed class ReportTests(SmartStockApiFactory factory)
     }
 
     /// <summary>Produto de marca nova com 250 na Matriz, 100 no Depósito e −20 em Mogi Mirim; análise gerada.</summary>
-    private static async Task<(string Product, int BrandId)> PrepareHighStockAsync(HttpClient admin)
+    private static async Task<(string Product, int BrandId)> PrepareHighStockAsync(
+        HttpClient admin, string matriz = "250", string deposito = "100", string mogiMirim = "-20")
     {
         var brand = UniqueCode("2");
         var product = UniqueCode("795");
@@ -149,7 +168,7 @@ public sealed class ReportTests(SmartStockApiFactory factory)
         await admin.ImportAndConfirmAsync("Products", "Produtos.xlsx",
             Xlsx(ProductHeaders, [product, $"PRODUTO {product}", brand, "PC", "1", "BRINQUEDOS", "OUTROS", "R", ""]));
         await admin.ImportAndConfirmAsync("Stock", "Estoque.xlsx",
-            Xlsx(["Codigo do Produto", "01 MATRIZ", "05 DEPOSITO", "06 MOGI MIRIM"], [product, "250", "100", "-20"]), Today);
+            Xlsx(["Codigo do Produto", "01 MATRIZ", "05 DEPOSITO", "06 MOGI MIRIM"], [product, matriz, deposito, mogiMirim]), Today);
         (await admin.PostAsync("/api/analysis", null)).EnsureSuccessStatusCode();
 
         var brands = (await admin.GetFromJsonAsync<PagedDto<BrandItem>>($"/api/brands?search={brand}", ApiClientExtensions.Json))!;

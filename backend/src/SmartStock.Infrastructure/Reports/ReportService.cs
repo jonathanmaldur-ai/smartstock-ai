@@ -246,7 +246,13 @@ internal sealed class ReportService(SmartStockDbContext db) : IReportService
         // Estoque negativo é diferença no sistema, não mercadoria: não entra no total.
         var candidates = await positions
             .GroupBy(p => p.ProductId)
-            .Select(g => new { ProductId = g.Key, Total = g.Sum(p => p.Stock > 0 ? p.Stock : 0), DailyAverage = g.Sum(p => p.DailyAverage) })
+            .Select(g => new
+            {
+                ProductId = g.Key,
+                Total = g.Sum(p => p.Stock > 0 ? p.Stock : 0),
+                Negatives = g.Sum(p => p.Stock < 0 ? p.Stock : 0),
+                DailyAverage = g.Sum(p => p.DailyAverage)
+            })
             .Where(g => g.Total > minimum)
             .ToListAsync(cancellationToken);
         if (c.Filter.StoreId is not null)
@@ -274,10 +280,12 @@ internal sealed class ReportService(SmartStockDbContext db) : IReportService
             {
                 var p = products[x.ProductId];
                 var coverage = StockMetrics.CoverageDays(x.Total, x.DailyAverage);
+                var roundedCoverage = coverage is null ? (decimal?)null : Math.Round(coverage.Value, 0);
                 object?[] fixedValues =
                 [
                     HighStockReport.GroupOf(p.Category), p.Code, p.Description, p.Reference, p.Brand, p.Category, p.Subcategory, x.Total,
-                    sold30Days?.GetValueOrDefault(x.ProductId), coverage is null ? null : Math.Round(coverage.Value, 0)
+                    x.Negatives, x.Total + x.Negatives, sold30Days?.GetValueOrDefault(x.ProductId), roundedCoverage,
+                    HighStockReport.CheckReason(x.Total, x.Negatives, roundedCoverage)
                 ];
                 return fixedValues.Concat(stores.Select(s => (object?)stockByStore.GetValueOrDefault((x.ProductId, s.Id)))).ToArray();
             })

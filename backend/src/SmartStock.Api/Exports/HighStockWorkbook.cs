@@ -5,7 +5,7 @@ namespace SmartStock.Api.Exports;
 
 /// <summary>
 /// Excel do relatório de estoque alto (decisão 64): Resumo, uma aba por grupo (Casa e Decor, Brinquedos, Outras) com
-/// todas as lojas em colunas e uma aba por loja com o que ela tem desses produtos.
+/// todas as lojas em colunas, "Conferir estoque" com os produtos de número suspeito e uma aba por loja.
 /// </summary>
 internal static class HighStockWorkbook
 {
@@ -24,6 +24,7 @@ internal static class HighStockWorkbook
         AddSummary(workbook, report);
         foreach (var group in HighStockReport.Groups)
             AddGroupSheet(workbook, report, group, rows.Where(r => GroupOf(r) == group).ToList());
+        AddCheckSheet(workbook, report);
         for (var s = 0; s < stores.Count; s++)
             AddStoreSheet(workbook, report, stores[s], fixedCount + s);
 
@@ -50,6 +51,11 @@ internal static class HighStockWorkbook
             sheet.Cell(row, 3).Value = items.Sum(Total);
             row++;
         }
+
+        sheet.Cell(row, 1).Value = "Conferir estoque no ERP";
+        sheet.Cell(row, 2).Value = report.Rows.Count(r => r[HighStockReport.CheckColumn] is not null);
+        sheet.Cell(row, 1).Style.Font.FontColor = XLColor.FromHtml("#B45309");
+        row++;
 
         row++;
         sheet.Cell(row, 1).Value = $"{HighStockReport.OtherGroup}: por categoria";
@@ -81,6 +87,19 @@ internal static class HighStockWorkbook
         var columns = report.Columns.Skip(1).ToList();
         WriteTable(sheet, columns, rows.Select(r => r.Skip(1).ToList()).ToList());
         sheet.SheetView.Freeze(HeaderRow, 2);
+    }
+
+    /// <summary>Produtos com negativos altos ou cobertura acima de 5 anos: o número pode estar errado no ERP.</summary>
+    private static void AddCheckSheet(XLWorkbook workbook, ReportData report)
+    {
+        var sheet = workbook.AddWorksheet("Conferir estoque");
+        WriteTitle(sheet, report);
+        sheet.Cell(3, 1).Value =
+            "Negativos altos: o negativo passa de 10% do total (ex.: transferência lançada errada). Cobertura acima de 5 anos: quantidade fora da realidade da venda.";
+        sheet.Cell(3, 1).Style.Font.FontColor = SubtitleColor;
+        var rows = report.Rows.Where(r => r[HighStockReport.CheckColumn] is not null).Select(r => r.ToList()).ToList();
+        WriteTable(sheet, report.Columns.ToList(), rows);
+        sheet.SheetView.Freeze(HeaderRow, 3);
     }
 
     /// <summary>Os produtos da lista que a loja tem em estoque, por grupo e da maior quantidade para a menor.</summary>

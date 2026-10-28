@@ -20,12 +20,35 @@ public static class HighStockReport
         new("Grupo", ReportColumnKind.Text), new("Código", ReportColumnKind.Text), new("Produto", ReportColumnKind.Text),
         new("Referência", ReportColumnKind.Text), new("Marca", ReportColumnKind.Text), new("Categoria", ReportColumnKind.Text),
         new("Subcategoria", ReportColumnKind.Text), new("Total (un.)", ReportColumnKind.Decimal),
-        new("Venda 30 dias", ReportColumnKind.Decimal), new("Cobertura (dias)", ReportColumnKind.Decimal)
+        new("Negativos na rede", ReportColumnKind.Decimal), new("Total líquido", ReportColumnKind.Decimal),
+        new("Venda 30 dias", ReportColumnKind.Decimal), new("Cobertura (dias)", ReportColumnKind.Decimal),
+        new("Conferir estoque", ReportColumnKind.Text)
     ];
 
     public const int GroupColumn = 0;
     public const int CategoryColumn = 5;
     public const int TotalColumn = 7;
+    public const int CheckColumn = 12;
+
+    /// <summary>Negativos acima desta fração do total: provável erro de lançamento no ERP (ex.: transferência espelhada).</summary>
+    public const decimal NegativeShareToCheck = 0.10m;
+
+    /// <summary>Cobertura acima de 5 anos: quantidade fora da realidade da venda (ex.: digitação errada).</summary>
+    public const decimal CoverageDaysToCheck = 5 * 365;
+
+    /// <summary>
+    /// Motivo para conferir o estoque no ERP, ou null. O total do relatório é o estoque físico (só positivos); os
+    /// negativos e a cobertura apontam quando esse número pode estar errado.
+    /// </summary>
+    public static string? CheckReason(decimal total, decimal negatives, decimal? coverageDays)
+    {
+        var reasons = new List<string>();
+        if (-negatives > total * NegativeShareToCheck)
+            reasons.Add("Negativos altos");
+        if (coverageDays > CoverageDaysToCheck)
+            reasons.Add("Cobertura acima de 5 anos");
+        return reasons.Count == 0 ? null : string.Join(" e ", reasons);
+    }
 
     /// <summary>Casa e Decor é a categoria HOME do ERP; Brinquedos, a categoria BRINQUEDOS (já com as grafias corrigidas).</summary>
     public static string GroupOf(string category) => category switch
