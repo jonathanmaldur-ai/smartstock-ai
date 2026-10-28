@@ -44,6 +44,10 @@ internal sealed class ReportService(SmartStockDbContext db) : IReportService
         new(new("transferencias-decisoes", "Transferências aprovadas, rejeitadas e realizadas",
                 "Histórico de decisões: quem decidiu, quando e se a transferência apareceu no arquivo do ERP.", "Transferências"),
             (c, m, ct) => SuggestionsAsync(c, m, [SuggestionStatus.Approved, SuggestionStatus.Rejected, SuggestionStatus.Completed], ct)),
+        new(new(HighStockReport.Key, "Produtos com estoque alto",
+                "Produtos com mais unidades que o mínimo, somando lojas e depósito, com a quantidade de cada loja. Para campanhas e queima de estoque.",
+                "Campanhas"),
+            HighStockAsync),
     ];
 
     public async Task<ReportCatalog> CatalogAsync(CancellationToken cancellationToken = default)
@@ -57,6 +61,13 @@ internal sealed class ReportService(SmartStockDbContext db) : IReportService
         var definition = Definitions.FirstOrDefault(d => d.Info.Key == key);
         if (definition is null)
             return Error.NotFound("report.not_found", "Relatório não encontrado.");
+
+        // O mínimo de unidades só vale no relatório de estoque alto (decisão 64).
+        filter = key == HighStockReport.Key
+            ? filter with { MinQuantity = filter.MinQuantity ?? HighStockReport.DefaultMinQuantity }
+            : filter with { MinQuantity = null };
+        if (filter.MinQuantity is <= 0)
+            return Error.Validation("report.min_quantity", "Informe um mínimo de unidades maior que zero.");
 
         var analysis = await db.StockAnalyses.AsNoTracking().OrderByDescending(a => a.CreatedAt).FirstOrDefaultAsync(cancellationToken);
         if (analysis is null)
@@ -218,6 +229,78 @@ internal sealed class ReportService(SmartStockDbContext db) : IReportService
         }).ToList(), total);
     }
 
+    // ---- Estoque alto (decisão 64) -------------------------------------------------------------------------------
+
+    private async Task<(IReadOnlyList<ReportColumn>, List<object?[]>, int)> HighStockAsync(
+        ReportContext c, int? maxRows, CancellationToken cancellationToken)
+    {
+        var minimum = c.Filter.MinQuantity ?? HighStockReport.DefaultMinQuantity;
+        var positions =
+            from p in db.StockPositions.AsNoTracking()
+            join product in db.Products on p.ProductId equals product.Id
+            where p.AnalysisId == c.Analysis.Id
+                  && (c.Filter.BrandId == null || product.BrandId == c.Filter.BrandId)
+                  && (c.Filter.CategoryId == null || product.CategoryId == c.Filter.CategoryId)
+            select p;
+
+        // Estoque negativo é diferença no sistema, não mercadoria: não entra no total.
+        var candidates = await positions
+            .GroupBy(p => p.ProductId)
+            .Select(g => new { ProductId = g.Key, Total = g.Sum(p => p.Stock > 0 ? p.Stock : 0), DailyAverage = g.Sum(p => p.DailyAverage) })
+            .Where(g => g.Total > minimum)
+            .ToListAsync(cancellationToken);
+        if (c.Filter.StoreId is not null)
+        {
+            var inStore = (await positions.Where(p => p.StoreId == c.Filter.StoreId && p.Stock > 0).Select(p => p.ProductId).ToListAsync(cancellationToken)).ToHashSet();
+            candidates = candidates.Where(x => inStore.Contains(x.ProductId)).ToList();
+        }
+
+        var ids = candidates.Select(x => x.ProductId).ToList();
+        var stores = await db.Stores.AsNoTracking().Where(s => s.Status == Domain.Catalog.StoreStatus.Active).OrderBy(s => s.Code).ToListAsync(cancellationToken);
+        var stockByStore = (await db.StockPositions.AsNoTracking()
+                .Where(p => p.AnalysisId == c.Analysis.Id && ids.Contains(p.ProductId))
+                .Select(p => new { p.ProductId, p.StoreId, p.Stock })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(p => (p.ProductId, p.StoreId), p => p.Stock);
+        var products = await db.Products.AsNoTracking()
+            .Where(p => ids.Contains(p.Id))
+            .Select(p => new { p.Id, p.Code, p.Description, p.Reference, Brand = p.Brand.Name, Category = p.Category.Name, Subcategory = p.Subcategory != null ? p.Subcategory.Name : null })
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+        var sold30Days = await Sold30DaysAsync(ids, cancellationToken);
+
+        var ordered = candidates.OrderByDescending(x => x.Total).ThenBy(x => products[x.ProductId].Description).ToList();
+        var rows = (maxRows is null ? ordered : ordered.Take(maxRows.Value))
+            .Select(x =>
+            {
+                var p = products[x.ProductId];
+                var coverage = StockMetrics.CoverageDays(x.Total, x.DailyAverage);
+                object?[] fixedValues =
+                [
+                    HighStockReport.GroupOf(p.Category), p.Code, p.Description, p.Reference, p.Brand, p.Category, p.Subcategory, x.Total,
+                    sold30Days?.GetValueOrDefault(x.ProductId), coverage is null ? null : Math.Round(coverage.Value, 0)
+                ];
+                return fixedValues.Concat(stores.Select(s => (object?)stockByStore.GetValueOrDefault((x.ProductId, s.Id)))).ToArray();
+            })
+            .ToList();
+
+        var storeColumns = stores.Select(s => new ReportColumn($"{s.Code} {s.Name}", ReportColumnKind.Decimal));
+        return ([.. HighStockReport.FixedColumns, .. storeColumns], rows, ordered.Count);
+    }
+
+    /// <summary>Venda dos últimos 30 dias com venda importada por produto (decisão 52); null sem vendas por dia.</summary>
+    private async Task<Dictionary<int, decimal>?> Sold30DaysAsync(List<int> ids, CancellationToken cancellationToken)
+    {
+        var last = await db.DailySaleItems.MaxAsync(d => (DateOnly?)d.Date, cancellationToken);
+        if (last is null)
+            return null;
+        var from = last.Value.AddDays(-29);
+        return await db.DailySaleItems.AsNoTracking()
+            .Where(d => d.Date >= from && ids.Contains(d.ProductId))
+            .GroupBy(d => d.ProductId)
+            .Select(g => new { g.Key, Quantity = g.Sum(d => d.Quantity) })
+            .ToDictionaryAsync(g => g.Key, g => g.Quantity, cancellationToken);
+    }
+
     // ---- Apoio ---------------------------------------------------------------------------------------------------
 
     private async Task<string> FilterSummaryAsync(ReportFilter filter, CancellationToken cancellationToken)
@@ -229,6 +312,8 @@ internal sealed class ReportService(SmartStockDbContext db) : IReportService
             parts.Add("Marca " + await db.Brands.Where(b => b.Id == filter.BrandId).Select(b => b.Name).FirstOrDefaultAsync(cancellationToken));
         if (filter.CategoryId is not null)
             parts.Add("Categoria " + await db.Categories.Where(x => x.Id == filter.CategoryId).Select(x => x.Name).FirstOrDefaultAsync(cancellationToken));
+        if (filter.MinQuantity is not null)
+            parts.Add($"Mais de {filter.MinQuantity:N0} unidades na rede");
         return parts.Count == 0 ? "Rede toda" : string.Join(" · ", parts);
     }
 

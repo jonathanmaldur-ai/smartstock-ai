@@ -21,7 +21,12 @@ export type ReportData = {
   totalRows: number
 }
 
-export type ReportFilters = { storeId?: number; brandId?: number; categoryId?: number }
+/** minQuantity: só no relatório de estoque alto (mínimo de unidades na rede; o servidor usa 300 se vier vazio). */
+export type ReportFilters = { storeId?: number; brandId?: number; categoryId?: number; minQuantity?: number }
+
+/** Produtos com estoque alto (decisão 64): para campanhas e queima de estoque. */
+export const HIGH_STOCK_KEY = 'estoque-alto'
+export const HIGH_STOCK_DEFAULT_MIN = 300
 
 export const useReportCatalog = () =>
   useQuery({ queryKey: ['reports', 'catalog'], queryFn: () => apiRequest<ReportCatalog>('/reports') })

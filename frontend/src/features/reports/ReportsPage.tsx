@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/layout/AppShell'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Alert, EmptyState, Skeleton } from '@/components/ui/Feedback'
-import { SelectField } from '@/components/ui/Field'
+import { SelectField, TextField } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
 import { hasRole, useAuth } from '@/features/auth/useAuth'
 import { TableError, TableLoading } from '@/features/catalog/CatalogStates'
@@ -18,6 +18,8 @@ import { QUANTITY_DESCRIPTION, QUANTITY_TITLE, QuantitySalesPanel } from './Quan
 import { ReportTable } from './ReportTable'
 import {
   DAILY_KEY,
+  HIGH_STOCK_DEFAULT_MIN,
+  HIGH_STOCK_KEY,
   MONTHLY_KEY,
   QUANTITY_KEY,
   quantityReportRoles,
@@ -127,7 +129,10 @@ function ReportPanel({
   const toast = useToast()
   const stores = useStores()
   const categories = useCategories()
-  const { data, isPending, isError, error, refetch, isFetching } = useReport(report.key, filters)
+  const isHighStock = report.key === HIGH_STOCK_KEY
+  // O mínimo de unidades só vale no relatório de estoque alto; nos demais, não vai na consulta.
+  const reportFilters = isHighStock ? filters : { ...filters, minQuantity: undefined }
+  const { data, isPending, isError, error, refetch, isFetching } = useReport(report.key, reportFilters)
   const [downloading, setDownloading] = useState<'excel' | 'csv' | null>(null)
 
   const toNumber = (value: string) => (value ? Number(value) : undefined)
@@ -136,7 +141,7 @@ function ReportPanel({
   const download = async (format: 'excel' | 'csv') => {
     setDownloading(format)
     try {
-      await apiDownload(`/reports/${report.key}/${format}?${reportQuery(filters)}`, `${report.key}.${format === 'excel' ? 'xlsx' : 'csv'}`)
+      await apiDownload(`/reports/${report.key}/${format}?${reportQuery(reportFilters)}`, `${report.key}.${format === 'excel' ? 'xlsx' : 'csv'}`)
     } catch (e) {
       toast.show(e instanceof ApiError ? e.message : 'Não foi possível gerar o arquivo.', 'error')
     } finally {
@@ -144,7 +149,7 @@ function ReportPanel({
     }
   }
 
-  const print = () => window.open(`/relatorios/imprimir?${reportQuery({ ...filters })}&relatorio=${report.key}`, '_blank', 'noopener')
+  const print = () => window.open(`/relatorios/imprimir?${reportQuery({ ...reportFilters })}&relatorio=${report.key}`, '_blank', 'noopener')
 
   return (
     <Card>
@@ -165,7 +170,10 @@ function ReportPanel({
           </>
         }
       />
-      <div className="grid gap-4 border-b border-border p-4 tablet:grid-cols-3 tablet:px-6">
+      <div className={cn('grid gap-4 border-b border-border p-4 tablet:px-6', isHighStock ? 'tablet:grid-cols-4' : 'tablet:grid-cols-3')}>
+        {isHighStock && (
+          <MinQuantityField value={filters.minQuantity} onChange={(minQuantity) => onFilters({ ...filters, minQuantity })} />
+        )}
         <SelectField
           label="Loja"
           value={filters.storeId ?? ''}
@@ -226,5 +234,36 @@ function ReportPanel({
         </div>
       )}
     </Card>
+  )
+}
+
+/** Mínimo de unidades do relatório de estoque alto: aplica ao sair do campo ou com Enter, não a cada tecla. */
+function MinQuantityField({ value, onChange }: { value: number | undefined; onChange: (value: number | undefined) => void }) {
+  const [text, setText] = useState(String(value ?? HIGH_STOCK_DEFAULT_MIN))
+  const parsed = Number(text)
+  const invalid = text !== '' && (!Number.isInteger(parsed) || parsed <= 0)
+
+  const apply = () => {
+    if (invalid) return
+    const next = text === '' || parsed === HIGH_STOCK_DEFAULT_MIN ? undefined : parsed
+    if (next !== value) onChange(next)
+  }
+
+  return (
+    <TextField
+      label="Mínimo de unidades"
+      type="number"
+      inputMode="numeric"
+      min={1}
+      step={1}
+      value={text}
+      error={invalid ? 'Informe um número inteiro maior que zero.' : undefined}
+      hint="Soma das lojas e do depósito."
+      onChange={(e) => setText(e.target.value)}
+      onBlur={apply}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') apply()
+      }}
+    />
   )
 }

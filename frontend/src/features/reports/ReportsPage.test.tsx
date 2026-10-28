@@ -90,6 +90,7 @@ const catalog: ReportCatalog = {
   reports: [
     { key: 'ruptura', title: 'Ruptura', description: 'Produtos sem estoque que vendem.', group: 'Situação do estoque' },
     { key: 'por-loja', title: 'Cobertura e giro por loja', description: 'Por loja.', group: 'Cobertura e giro' },
+    { key: 'estoque-alto', title: 'Produtos com estoque alto', description: 'Mais unidades que o mínimo.', group: 'Campanhas' },
   ],
   brands: [{ id: 3, name: 'MATTEL' }],
 }
@@ -166,7 +167,7 @@ describe('Relatórios', () => {
     api.mockReset()
     api.mockImplementation((path: string) => {
       if (path === '/reports') return Promise.resolve(catalog)
-      if (path.startsWith('/reports/ruptura')) return Promise.resolve(report)
+      if (path.startsWith('/reports/ruptura') || path.startsWith('/reports/estoque-alto')) return Promise.resolve(report)
       if (path.startsWith('/reports/mensal')) return Promise.resolve(monthly)
       if (path.startsWith('/reports/vendas-diarias/produtos/vendas'))
         return Promise.resolve([
@@ -204,6 +205,23 @@ describe('Relatórios', () => {
     expect(screen.getByText('4.177')).toBeInTheDocument()
     expect(screen.getByText(/O Excel e o CSV trazem todas as 34\.264/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Imprimir / PDF' })).toBeInTheDocument()
+  })
+
+  it('estoque alto pede o mínimo de unidades e só o envia nesse relatório', async () => {
+    renderAt('/relatorios')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Produtos com estoque alto' }))
+    const minimum = await screen.findByLabelText('Mínimo de unidades')
+    expect(minimum).toHaveValue(300)
+    expect(api).toHaveBeenCalledWith('/reports/estoque-alto?')
+
+    await userEvent.clear(minimum)
+    await userEvent.type(minimum, '500{Enter}')
+    await vi.waitFor(() => expect(api).toHaveBeenCalledWith('/reports/estoque-alto?minQuantity=500'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ruptura' }))
+    await vi.waitFor(() => expect(api).toHaveBeenCalledWith('/reports/ruptura?'))
+    expect(screen.queryByLabelText('Mínimo de unidades')).not.toBeInTheDocument()
   })
 
   it('a versão de impressão usa o relatório e os filtros da URL e abre a impressão', async () => {

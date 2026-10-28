@@ -17,7 +17,8 @@ public sealed record ReportInfo(string Key, string Title, string Description, st
 
 public sealed record ReportOption(int Id, string Name);
 
-public sealed record ReportFilter(int? StoreId, int? BrandId, int? CategoryId);
+/// <param name="MinQuantity">Só no relatório de estoque alto: mínimo de unidades na rede.</param>
+public sealed record ReportFilter(int? StoreId, int? BrandId, int? CategoryId, decimal? MinQuantity = null);
 
 public enum ReportColumnKind
 {

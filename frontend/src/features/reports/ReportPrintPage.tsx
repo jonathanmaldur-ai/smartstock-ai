@@ -53,7 +53,12 @@ function TablePrint() {
   const [params] = useSearchParams()
   const key = params.get('relatorio')
   const number = (name: string) => (params.get(name) ? Number(params.get(name)) : undefined)
-  const { data, isPending, isError } = useReport(key, { storeId: number('storeId'), brandId: number('brandId'), categoryId: number('categoryId') })
+  const { data, isPending, isError } = useReport(key, {
+    storeId: number('storeId'),
+    brandId: number('brandId'),
+    categoryId: number('categoryId'),
+    minQuantity: number('minQuantity'),
+  })
   usePrintWhenReady(data?.title ?? null)
 
   if (isPending || isError || !data) return <PrintState loading={isPending && !isError} />

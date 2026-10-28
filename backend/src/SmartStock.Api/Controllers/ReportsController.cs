@@ -105,7 +105,8 @@ public sealed class ReportsController(
     {
         var result = await reports.BuildAsync(key, filter.ToFilter(), null, cancellationToken);
         return result.IsSuccess
-            ? File(ReportExport.Excel(result.Value), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ReportExport.FileName(result.Value, "xlsx"))
+            ? File(key == HighStockReport.Key ? HighStockWorkbook.Build(result.Value) : ReportExport.Excel(result.Value),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ReportExport.FileName(result.Value, "xlsx"))
             : this.ToProblem(result.Error!);
     }
 
@@ -119,7 +120,7 @@ public sealed class ReportsController(
     }
 }
 
-public sealed record ReportFilterQuery(int? StoreId, int? BrandId, int? CategoryId)
+public sealed record ReportFilterQuery(int? StoreId, int? BrandId, int? CategoryId, decimal? MinQuantity)
 {
-    public ReportFilter ToFilter() => new(StoreId, BrandId, CategoryId);
+    public ReportFilter ToFilter() => new(StoreId, BrandId, CategoryId, MinQuantity);
 }
